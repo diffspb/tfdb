@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="6a0710dbc34934193e057433f05683cd80f63aab72f5fdc266b43aeb9079d844">
+  <title>TFDB C++14 API reference — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html" aria-current="page">C++ API</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../api.md">docs/api.md</a>. The Markdown file is canonical.</p>
+      <h1 id="tfdb-c-14-api-reference">TFDB C++14 API reference</h1>
+<p>TFDB (<strong>Telemetry Flash DB</strong>) exposes a dependency-free C++14 API under
+<code>include/tfdb/</code>. This document describes the public candidate API, its
+lifetime and durability contracts, and the intended production use of each
+type. On-media details are specified separately in <a href="format-v1.html"><code>format-v1.md</code></a>.</p>
+<p>Start with <a href="tutorial.html"><code>tutorial.md</code></a> for an end-to-end integration.</p>
+<h2 id="api-conventions">API conventions</h2>
+<h3 id="headers-and-namespace">Headers and namespace</h3>
+<p>All public names are in namespace <code>tfdb</code>:</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Header</th>
+<th scope="col">Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tfdb/status.hpp</code></td>
+<td>status codes and diagnostics</td>
+</tr>
+<tr>
+<td><code>tfdb/bytes.hpp</code></td>
+<td>non-owning byte views</td>
+</tr>
+<tr>
+<td><code>tfdb/storage.hpp</code></td>
+<td>backend interface, POSIX backend, exact I/O helpers</td>
+</tr>
+<tr>
+<td><code>tfdb/codec.hpp</code></td>
+<td>block-compression interface and built-in codecs</td>
+</tr>
+<tr>
+<td><code>tfdb/ring_store.hpp</code></td>
+<td>volume, writer, block query, recovery, metrics</td>
+</tr>
+<tr>
+<td><code>tfdb/record_profile.hpp</code></td>
+<td>record decoding/filtering and FramedRecordV1</td>
+</tr>
+<tr>
+<td><code>tfdb/async_writer.hpp</code></td>
+<td>bounded background writer</td>
+</tr>
+<tr>
+<td><code>tfdb/memory_storage.hpp</code></td>
+<td>deterministic in-memory/fault backend</td>
+</tr>
+<tr>
+<td><code>tfdb/counting_storage.hpp</code></td>
+<td>backend I/O counter decorator</td>
+</tr>
+</tbody>
+</table></div>
+<p>Headers under <code>src/</code>, including <code>internal_format.hpp</code>, are not public API.</p>
+<h3 id="error-handling">Error handling</h3>
+<p>Expected failures are returned as <code>Status</code>; TFDB does not use exceptions for
+I/O or validation errors. Check every returned status. <code>Status::message()</code> is
+diagnostic text, not a stable machine interface; branch on <code>StatusCode</code>.</p>
+<p>Allocation and user-supplied callbacks/codecs use normal C++ semantics and may
+still throw. Do not let exceptions escape across application ABI boundaries
+that forbid them.</p>
+<h3 id="time-and-ranges">Time and ranges</h3>
+<p>Indexed timestamps are signed 64-bit integer nanoseconds supplied by the
+application. TFDB does not read realtime clocks for record indexing. A
+<code>TimeRange</code> is half-open: <code>[begin_ns, end_ns)</code>. A nonzero <code>time_domain_id</code>
+defines the meaning and epoch; <code>1</code> is Unix realtime by convention.</p>
+<p>TFDB preserves physical append order. It does not sort records by timestamp.</p>
+<h3 id="ownership-and-borrowed-views">Ownership and borrowed views</h3>
+<p><code>ByteView</code> and <code>MutableByteView</code> never own memory. In particular:</p>
+<ul>
+<li><code>RingStore::append*()</code> copies the record before returning;</li>
+<li><code>AsyncWriter::submit*()</code> copies the record before returning;</li>
+<li><code>BlockEvent::data</code> is valid only during its <code>BlockVisitor</code> call;</li>
+<li><code>RecordView::encoded</code> and <code>payload</code> are valid only during their decode or
+record visitor call.</li>
+</ul>
+<p>Copy callback bytes immediately if they must outlive the callback.</p>
+<h3 id="concurrency-model">Concurrency model</h3>
+<p>The supported topology is one writer and multiple readers. <code>FileStorage</code>
+holds a nonblocking advisory exclusive lock for a writable open. <code>RingStore</code>
+serializes its own state, while queries work from generation snapshots and can
+report a gap if rotation overtakes them.</p>
+<p>Use <code>AsyncWriter</code> when multiple producer threads need to submit records. Do not
+mix direct <code>RingStore</code> mutation with an active <code>AsyncWriter</code>; keep rotation,
+checkpoint, and shutdown under one integration owner. The <code>Storage</code> backend
+must support concurrent positional reads and one positional writer.</p>
+<h2 id="status-api">Status API</h2>
+<h3 id="enum-class-statuscode"><code>enum class StatusCode</code></h3>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Value</th>
+<th scope="col">Meaning and typical response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ok</code></td>
+<td>operation completed successfully</td>
+</tr>
+<tr>
+<td><code>invalid_argument</code></td>
+<td>invalid caller input, incompatible configuration, or wrong operation for the object</td>
+</tr>
+<tr>
+<td><code>out_of_range</code></td>
+<td>offset, length, or record exceeds a representable/configured bound</td>
+</tr>
+<tr>
+<td><code>io_error</code></td>
+<td>backend I/O failure or attempted mutation through a read-only object</td>
+</tr>
+<tr>
+<td><code>interrupted</code></td>
+<td>backend operation was interrupted and could not be transparently completed</td>
+</tr>
+<tr>
+<td><code>no_space</code></td>
+<td>backend range/capacity failure; normal ring rotation is handled internally</td>
+</tr>
+<tr>
+<td><code>corrupt</code></td>
+<td>reachable metadata/payload violates the format or integrity contract</td>
+</tr>
+<tr>
+<td><code>unsupported</code></td>
+<td>format feature, compression codec/version, or profile is unavailable</td>
+</tr>
+<tr>
+<td><code>not_found</code></td>
+<td>requested object is absent; reserved for APIs that distinguish absence</td>
+</tr>
+<tr>
+<td><code>busy</code></td>
+<td>nonblocking resource unavailable, including writer lock or full async queue</td>
+</tr>
+<tr>
+<td><code>overwritten</code></td>
+<td>a reader's snapshotted generation was rotated away</td>
+</tr>
+<tr>
+<td><code>generation_exhausted</code></td>
+<td>the 64-bit partition generation cannot advance</td>
+</tr>
+<tr>
+<td><code>closed</code></td>
+<td>mutation/async operation attempted after shutdown or without a running writer</td>
+</tr>
+<tr>
+<td><code>internal_error</code></td>
+<td>an invariant inside TFDB or a supplied extension was violated</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="class-status"><code>class Status</code></h3>
+<pre><code class="language-cpp">Status();
+Status(StatusCode code, const std::string&amp; message);
+static Status Ok();
+static Status Error(StatusCode code, const std::string&amp; message);
+bool ok() const;
+explicit operator bool() const;
+StatusCode code() const;
+const std::string&amp; message() const;
+</code></pre>
+<p>A default-constructed status is successful. <code>status_code_name(code)</code> returns a
+stable lowercase name for logging. It does not include the detail message.</p>
+<h2 id="byte-views">Byte views</h2>
+<h3 id="class-byteview"><code>class ByteView</code></h3>
+<p>Construct from <code>(const void*, size)</code>, a <code>std::vector&lt;std::uint8_t&gt;</code>, or as an
+empty view. Accessors are <code>data()</code>, <code>size()</code>, <code>empty()</code>, and <code>valid()</code>.</p>
+<p><code>valid()</code> is false only for a null pointer with nonzero length. Empty views may
+have a null pointer. Ring records themselves must be non-empty.</p>
+<h3 id="class-mutablebyteview"><code>class MutableByteView</code></h3>
+<p>The writable equivalent, constructed from <code>(void*, size)</code>. Accessors are
+<code>data()</code>, <code>size()</code>, and <code>valid()</code>.</p>
+<p>Neither class tracks the lifetime of its source buffer.</p>
+<h2 id="storage-backends">Storage backends</h2>
+<h3 id="struct-ioresult"><code>struct IoResult</code></h3>
+<pre><code class="language-cpp">std::size_t transferred;
+Status status;
+</code></pre>
+<p>A backend may return a successful short transfer. It must report the exact
+number of bytes transferred and must not over-report the caller's buffer.</p>
+<h3 id="class-storage"><code>class Storage</code></h3>
+<pre><code class="language-cpp">virtual std::uint64_t size() const = 0;
+virtual bool writable() const = 0;
+virtual IoResult read_at(std::uint64_t offset, MutableByteView output) = 0;
+virtual IoResult write_at(std::uint64_t offset, ByteView input) = 0;
+virtual Status flush() = 0;
+</code></pre>
+<p>Backend contract:</p>
+<ul>
+<li>size is fixed for the open lifetime;</li>
+<li>reads and writes are positional;</li>
+<li>concurrent reads plus one writer are supported;</li>
+<li>a successful <code>flush()</code> makes all preceding successful writes durable under
+the documented backend/device contract;</li>
+<li>zero-progress success for a nonempty transfer is invalid;</li>
+<li>unsupported durability must be an error, not a false success.</li>
+</ul>
+<p>The ring's power-loss claim is only as strong as this <code>flush()</code> contract.
+Backend methods used by <code>AsyncWriter</code> must not throw; an exception escaping a
+worker-thread extension is outside the <code>Status</code> model and may terminate the
+process.</p>
+<h3 id="exact-i-o-helpers">Exact I/O helpers</h3>
+<pre><code class="language-cpp">Status read_exact(Storage&amp;, std::uint64_t offset, MutableByteView);
+Status write_exact(Storage&amp;, std::uint64_t offset, ByteView);
+</code></pre>
+<p>These helpers complete bounded short transfers. They retry an
+<code>interrupted</code> result only when it transferred zero bytes, reject no-progress
+success, and reject backends that over-report progress.</p>
+<h3 id="class-filestorage"><code>class FileStorage</code></h3>
+<p>Linux backend for regular files and block devices.</p>
+<pre><code class="language-cpp">static Status open_existing(const std::string&amp; path, bool writable,
+                            std::shared_ptr&lt;FileStorage&gt;* output);
+static Status create(const std::string&amp; path, std::uint64_t size,
+                     bool overwrite,
+                     std::shared_ptr&lt;FileStorage&gt;* output);
+</code></pre>
+<p><code>open_existing()</code> opens a regular file or block device and determines its
+fixed size. A writable open obtains <code>flock(LOCK_EX | LOCK_NB)</code>.</p>
+<p><code>create()</code> creates/preallocates a regular file, synchronizes the file and its
+parent directory, and returns it writable. With <code>overwrite == false</code>, an
+existing path is rejected. With <code>overwrite == true</code>, an existing file is
+resized and may lose previous content; keep that mode out of normal startup.</p>
+<p>I/O uses <code>pread</code>, <code>pwrite</code>, and <code>fdatasync</code>. <code>FileStorage</code> does not enable
+<code>O_DIRECT</code> and does not issue flash discard/secure erase.</p>
+<h3 id="class-memorystorage"><code>class MemoryStorage</code></h3>
+<p>Deterministic volatile/durable image model for unit, crash, and integration
+tests. It is mutex-protected and implements <code>Storage</code>.</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">API</th>
+<th scope="col">Test behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>add_fault(FaultRule)</code></td>
+<td>inject a non-OK zero-transfer result, or a successful bounded short transfer, at a one-based call</td>
+</tr>
+<tr>
+<td><code>clear_faults()</code></td>
+<td>remove configured rules</td>
+</tr>
+<tr>
+<td><code>set_hook(StorageHook)</code></td>
+<td>observe/block before or after individual storage calls</td>
+</tr>
+<tr>
+<td><code>crash_discard_volatile()</code></td>
+<td>discard every unflushed change</td>
+</tr>
+<tr>
+<td><code>crash_persist_all_dirty()</code></td>
+<td>model a crash where all dirty writes happened to persist</td>
+</tr>
+<tr>
+<td><code>crash_materialize(fragments)</code></td>
+<td>persist selected pieces of dirty writes in explicit order, discard the rest</td>
+</tr>
+<tr>
+<td><code>corrupt_durable(offset, mask)</code></td>
+<td>XOR one byte in the durable image</td>
+</tr>
+<tr>
+<td><code>corrupt_volatile(offset, mask)</code></td>
+<td>XOR one byte in the current volatile image</td>
+</tr>
+<tr>
+<td><code>counters()</code> / <code>events()</code></td>
+<td>obtain exact operation metrics/history</td>
+</tr>
+<tr>
+<td><code>reset_counters()</code></td>
+<td>start a new call-number/measurement epoch without clearing bytes or fault rules</td>
+</tr>
+<tr>
+<td><code>durable_image()</code> / <code>volatile_image()</code></td>
+<td>copy an image for assertions or reopen tests</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>FaultRule::call</code> is one-based per <code>StorageOperation</code>. <code>WriteFragment</code> selects a
+successful write call, offset within that write, and length.</p>
+<p><code>StorageHook</code> receives <code>(operation, HookPoint, call, offset, requested_size)</code>.
+Release any application lock needed by the hook before allowing another thread
+to enter the backend.</p>
+<h3 id="class-countingstorage"><code>class CountingStorage</code></h3>
+<p>A mutex-protected decorator over another <code>Storage</code>. It forwards all behavior
+and exposes <code>StorageCounters</code> through <code>counters()</code> and <code>reset_counters()</code>.
+The delegate must be non-null and must outlive in-flight calls through its
+shared ownership.</p>
+<p><code>StorageCounters</code> contains call and byte counts for reads/writes plus flush
+calls. Counters measure reported transferred bytes, not physical NAND writes.</p>
+<h2 id="compression-api">Compression API</h2>
+<h3 id="enum-class-compressionid"><code>enum class CompressionId</code></h3>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">ID</th>
+<th style="text-align:right" scope="col">Value</th>
+<th scope="col">Availability</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>none</code></td>
+<td style="text-align:right">0</td>
+<td>built in</td>
+</tr>
+<tr>
+<td><code>packbits</code></td>
+<td style="text-align:right">1</td>
+<td>built in, dependency-free</td>
+</tr>
+<tr>
+<td><code>lz4_block</code></td>
+<td style="text-align:right">2</td>
+<td>reserved; not implemented by the core</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="class-compressioncodec"><code>class CompressionCodec</code></h3>
+<pre><code class="language-cpp">virtual CompressionId id() const = 0;
+virtual std::uint16_t version() const = 0;
+virtual std::size_t max_compressed_size(std::size_t input_size) const = 0;
+virtual Status compress(ByteView input,
+                        std::vector&lt;std::uint8_t&gt;* output) const = 0;
+virtual Status decompress(ByteView input, std::size_t expected_size,
+                          std::vector&lt;std::uint8_t&gt;* output) const = 0;
+</code></pre>
+<p>A custom codec instance must be safe for the store's reader/writer topology.
+<code>compress()</code> must stay within its declared maximum. <code>decompress()</code> must produce
+exactly <code>expected_size</code>; TFDB rejects a mismatch.
+Codec methods must not throw when they may run on the async worker; report
+extension failures with <code>Status</code>. The input view may refer to the current
+contents of <code>*output</code>; consume it before changing output or build into a
+temporary vector and swap. Both built-in codecs support aliased input/output.</p>
+<p>Factory functions:</p>
+<pre><code class="language-cpp">std::shared_ptr&lt;const CompressionCodec&gt; no_compression_codec();
+std::shared_ptr&lt;const CompressionCodec&gt; packbits_codec();
+std::shared_ptr&lt;const CompressionCodec&gt; built_in_codec(CompressionId id);
+</code></pre>
+<p>When compression is configured, TFDB stores a block compressed only if the
+result is smaller; otherwise that block uses <code>CompressionId::none</code>.</p>
+<h2 id="volume-and-partition-configuration">Volume and partition configuration</h2>
+<h3 id="struct-volumeoptions"><code>struct VolumeOptions</code></h3>
+<p>Used only by <code>RingStore::format()</code>.</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Field</th>
+<th style="text-align:right" scope="col">Default</th>
+<th scope="col">Contract</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>partition_size</code></td>
+<td style="text-align:right">64 MiB</td>
+<td>fixed partition span; quantum multiple</td>
+</tr>
+<tr>
+<td><code>index_region_size</code></td>
+<td style="text-align:right">1 MiB</td>
+<td>reserved time-index bytes per partition; quantum multiple</td>
+</tr>
+<tr>
+<td><code>max_block_payload</code></td>
+<td style="text-align:right">32 KiB</td>
+<td>maximum uncompressed block payload and maximum single record size</td>
+</tr>
+<tr>
+<td><code>persistence_quantum</code></td>
+<td style="text-align:right">4096</td>
+<td>power of two, at most 4096; logical separation between block starts</td>
+</tr>
+<tr>
+<td><code>volume_id_high/low</code></td>
+<td style="text-align:right">0/0</td>
+<td>zero requests a random 128-bit incarnation ID</td>
+</tr>
+<tr>
+<td><code>allow_explicit_volume_id_for_testing</code></td>
+<td style="text-align:right">false</td>
+<td>must be true to use deterministic nonzero IDs; never enable in production</td>
+</tr>
+<tr>
+<td><code>created_time_ns</code></td>
+<td style="text-align:right">0</td>
+<td>informational volume creation time supplied by the application</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>persistence_quantum</code> is a layout/durability isolation unit, not an
+<code>O_DIRECT</code> alignment promise.</p>
+<h3 id="struct-partitionoptions"><code>struct PartitionOptions</code></h3>
+<p>Persisted in every partition header.</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Field</th>
+<th style="text-align:right" scope="col">Default</th>
+<th scope="col">Contract</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>compression</code></td>
+<td style="text-align:right"><code>none</code></td>
+<td>configured codec; individual blocks may fall back to none</td>
+</tr>
+<tr>
+<td><code>compression_version</code></td>
+<td style="text-align:right">1</td>
+<td>must match a registered codec</td>
+</tr>
+<tr>
+<td><code>record_format_id</code></td>
+<td style="text-align:right">0</td>
+<td>zero means opaque/native blocks without record-profile declaration</td>
+</tr>
+<tr>
+<td><code>record_format_version</code></td>
+<td style="text-align:right">0</td>
+<td>both profile ID and version must be zero or both nonzero</td>
+</tr>
+<tr>
+<td><code>time_domain_id</code></td>
+<td style="text-align:right">1</td>
+<td>nonzero stable project time-domain identifier</td>
+</tr>
+<tr>
+<td><code>allowed_backward_skew_ns</code></td>
+<td style="text-align:right">-1</td>
+<td>negative disables backward anomaly detection</td>
+</tr>
+<tr>
+<td><code>allowed_forward_step_ns</code></td>
+<td style="text-align:right">-1</td>
+<td>negative disables forward anomaly detection</td>
+</tr>
+</tbody>
+</table></div>
+<p>Configuration changes apply at partition boundaries and require no migration
+of older partitions.</p>
+<h3 id="struct-appendcontract"><code>struct AppendContract</code></h3>
+<pre><code class="language-cpp">std::uint64_t record_format_id;
+std::uint16_t record_format_version;
+std::uint64_t time_domain_id;
+</code></pre>
+<p>All three fields must be nonzero for checked append/submit. The contract is
+compared with the active partition after any automatic rotation and before the
+record is copied into the builder.</p>
+<h3 id="struct-openoptions"><code>struct OpenOptions</code></h3>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Field</th>
+<th style="text-align:right" scope="col">Default</th>
+<th scope="col">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>writable</code></td>
+<td style="text-align:right">false</td>
+<td>recover as a writer and create/continue the active partition</td>
+</tr>
+<tr>
+<td><code>verify_payloads_on_open</code></td>
+<td style="text-align:right">false</td>
+<td>strictly scan/CRC-check all reachable blocks and exercise compression decode/raw-size validation</td>
+</tr>
+<tr>
+<td><code>next_partition</code></td>
+<td style="text-align:right">defaults above</td>
+<td>contract for a newly created/next automatic partition</td>
+</tr>
+<tr>
+<td><code>compression_codecs</code></td>
+<td style="text-align:right">empty</td>
+<td>additional codec implementations needed by retained media or next partition</td>
+</tr>
+<tr>
+<td><code>writer_id_high/low</code></td>
+<td style="text-align:right">0/0</td>
+<td>zero requests a random writer-incarnation ID</td>
+</tr>
+<tr>
+<td><code>allow_explicit_writer_id_for_testing</code></td>
+<td style="text-align:right">false</td>
+<td>deterministic writer IDs are tests/golden vectors only</td>
+</tr>
+</tbody>
+</table></div>
+<p>A read-only open does not create a partition. A writable open refuses ambiguous
+damaged partition headers because it cannot safely choose what to overwrite.
+Strict open does not invoke <code>RecordProfile</code> and therefore does not validate
+native record framing or application payload schemas.</p>
+<h2 id="ring-store-api">Ring store API</h2>
+<h3 id="formatting-and-open">Formatting and open</h3>
+<pre><code class="language-cpp">static Status RingStore::format(Storage&amp;, const VolumeOptions&amp;);
+static Status RingStore::open(std::shared_ptr&lt;Storage&gt;, const OpenOptions&amp;,
+                              std::unique_ptr&lt;RingStore&gt;* output);
+</code></pre>
+<p><code>format()</code> writes and flushes a fresh duplicated volume header. It requires a
+writable backend and valid geometry. Existing partition bytes may remain
+physically present but belong to a different volume incarnation and are not
+reachable.</p>
+<p><code>open()</code> validates the volume, discovers generations, uses sealed indexes or
+bounded block scans, and reconstructs the active partition. The store retains
+the backend <code>shared_ptr</code> for its lifetime.</p>
+<h3 id="append-and-durability">Append and durability</h3>
+<pre><code class="language-cpp">Status append(ByteView encoded_record, std::int64_t index_time_ns,
+              std::uint32_t record_flags = 0);
+Status append_checked(ByteView encoded_record,
+                      std::int64_t index_time_ns,
+                      const AppendContract&amp; expected,
+                      std::uint32_t record_flags = 0);
+Status publish();
+Status checkpoint();
+Status emergency_checkpoint();
+Status close();
+</code></pre>
+<p><code>append*()</code> accepts exactly one whole nonempty record, copies it, and preserves
+physical call order. A record larger than <code>max_block_payload</code> returns
+<code>out_of_range</code>. If it does not fit the current builder, the previous builder is
+published first. Full partitions rotate automatically.</p>
+<p><code>append_checked()</code> additionally prevents records from crossing into a
+partition with a different record profile/version/time domain.</p>
+<p>Application record flags occupy bits 16..31 of the 32-bit argument. Bit 0 is
+reserved as <code>kRecordFlagUnsynchronizedTime</code> and is translated to the block's
+<code>kBlockFlagUnsynchronizedTime</code>. Other low bits are reserved and ignored.</p>
+<p><code>publish()</code> emits a complete CRC-protected block but does not call <code>flush()</code>.
+<code>checkpoint()</code> publishes the current tail and makes preceding successful
+writes durable. <code>emergency_checkpoint()</code> is an alias. <code>close()</code> performs the
+graceful final checkpoint and then causes mutating calls to return <code>closed</code>;
+repeated close succeeds.</p>
+<p>The destructor does not checkpoint.</p>
+<h3 id="rotation-and-future-configuration">Rotation and future configuration</h3>
+<pre><code class="language-cpp">Status rotate(const PartitionOptions&amp; next_options);
+Status set_next_partition_options(const PartitionOptions&amp; options);
+</code></pre>
+<p><code>rotate()</code> publishes the builder, makes existing active data durable, writes
+and flushes the partition index/footer, then creates and flushes the next
+generation. It can overwrite the oldest slot by design.</p>
+<p><code>set_next_partition_options()</code> changes only future automatic rotation. It
+validates codec/profile/time-domain consistency immediately.</p>
+<h3 id="block-queries">Block queries</h3>
+<pre><code class="language-cpp">Status query_blocks(const TimeRange&amp;, const QueryOptions&amp;,
+                    const BlockVisitor&amp;) const;
+Status scan_blocks(const QueryOptions&amp;, const BlockVisitor&amp;) const;
+</code></pre>
+<p><code>query_blocks()</code> uses per-block min/max time and filters by a nonzero time
+domain. A block is a candidate when its inclusive min/max envelope overlaps
+the requested half-open range. Individual records are not inspected.</p>
+<p><code>scan_blocks()</code> visits all currently reachable blocks across time domains in
+generation/block sequence order.</p>
+<p>Both APIs take a snapshot, always verify block CRCs, decompress payloads, and
+emit <code>BlockEvent</code>:</p>
+<pre><code class="language-cpp">enum class BlockEventKind { data, overwritten_gap, corrupt_gap };
+</code></pre>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Kind</th>
+<th scope="col"><code>data</code></th>
+<th scope="col"><code>detail</code></th>
+<th scope="col">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td>borrowed decompressed block</td>
+<td>OK</td>
+<td>one valid reachable block</td>
+</tr>
+<tr>
+<td><code>overwritten_gap</code></td>
+<td>empty</td>
+<td><code>overwritten</code></td>
+<td>rotation replaced a snapshotted generation while reading</td>
+</tr>
+<tr>
+<td><code>corrupt_gap</code></td>
+<td>empty</td>
+<td><code>corrupt</code> or related detail</td>
+<td>reachable partition/block cannot be validated</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>QueryOptions::continue_on_gap</code> defaults to true. When false, the gap is first
+delivered to the visitor and then returned as the query status. Returning false
+from the visitor is a successful early stop.</p>
+<p><code>QueryOptions::verify_payload_crc</code> is ignored; live-ring CRC validation is
+mandatory.</p>
+<h3 id="inspection">Inspection</h3>
+<pre><code class="language-cpp">Status inspect(VolumeInfo* output) const;
+Status active_partition_info(PartitionInfo* output) const;
+StoreMetrics metrics() const;
+Status writer_status() const;
+bool writable() const;
+</code></pre>
+<p><code>inspect()</code> returns volume geometry/ID plus known partitions. <code>partitions</code> are
+reported in generation order. <code>active_partition_info()</code> returns <code>closed</code> when
+there is no active partition, including a read-only empty volume.</p>
+<p><code>PartitionInfo</code> contains slot, generation, sealed state, block count, data
+bytes, time bounds, aggregate flags, and its persisted <code>PartitionOptions</code>.
+Zero time bounds on an empty partition do not establish that its time domain
+contains timestamp zero.</p>
+<p><code>writable()</code> reports the immutable capability selected at open. It remains true
+after close or a writer fault. <code>writer_status()</code> returns OK only while mutations
+can currently be accepted; otherwise it returns read-only <code>invalid_argument</code>,
+<code>closed</code>, or the original stored fault. Use it before attaching a new async
+wrapper and in writer health checks.</p>
+<h3 id="block-flags">Block flags</h3>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Constant</th>
+<th scope="col">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kBlockFlagTimeAnomaly</code></td>
+<td>configured adjacent timestamp threshold was exceeded</td>
+</tr>
+<tr>
+<td><code>kBlockFlagUnsynchronizedTime</code></td>
+<td>at least one record was marked unsynchronized</td>
+</tr>
+<tr>
+<td><code>kBlockFlagApplicationBase</code></td>
+<td>first bit available for project block flags (<code>1u &lt;&lt; 16</code>)</td>
+</tr>
+<tr>
+<td><code>kRecordFlagUnsynchronizedTime</code></td>
+<td>record input flag translated to the block unsynchronized flag</td>
+</tr>
+</tbody>
+</table></div>
+<p>Anomalies are diagnostic: the record is retained.</p>
+<h3 id="blockmetadata"><code>BlockMetadata</code></h3>
+<p>For each event, metadata identifies:</p>
+<ul>
+<li><code>partition_slot</code>, <code>partition_generation</code>, and <code>block_sequence</code>;</li>
+<li><code>record_count</code>, min/max indexed time, and flags;</li>
+<li>actual block compression, stored/raw sizes, and physical offset;</li>
+<li>partition record format ID/version and time-domain ID.</li>
+</ul>
+<p>The physical offset is an inspection/export aid. It is not a stable record ID
+because ring rotation overwrites slots.</p>
+<h3 id="storemetrics"><code>StoreMetrics</code></h3>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Field group</th>
+<th scope="col">Fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Accepted/published</td>
+<td><code>accepted_records</code>, <code>accepted_payload_bytes</code>, <code>published_blocks</code>, <code>stored_block_bytes</code>, <code>raw_block_bytes</code></td>
+</tr>
+<tr>
+<td>Durability/rotation</td>
+<td><code>checkpoints</code>, <code>rotations</code>, <code>durable_records</code>, <code>durable_blocks</code></td>
+</tr>
+<tr>
+<td>Data quality</td>
+<td><code>time_anomalies</code>, <code>overwritten_gaps</code>, <code>corrupt_gaps</code></td>
+</tr>
+<tr>
+<td>Backend sync</td>
+<td><code>sync_errors</code>, <code>sync_calls</code>, <code>last_sync_duration_ns</code>, <code>max_sync_duration_ns</code></td>
+</tr>
+<tr>
+<td>Exposure</td>
+<td><code>oldest_undurable_age_ns</code>, <code>max_accepted_to_durable_ns</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Metrics are process-lifetime observations for this open store, not persistent
+counters. Sample them for health monitoring; do not reconstruct retention from
+them.</p>
+<h2 id="record-profiles">Record profiles</h2>
+<h3 id="struct-recordview"><code>struct RecordView</code></h3>
+<pre><code class="language-cpp">ByteView encoded;
+ByteView payload;
+std::int64_t index_time_ns;
+std::uint64_t selector;
+std::uint16_t flags;
+</code></pre>
+<p>Both views are callback-scoped. <code>encoded</code> contains the native complete record;
+<code>payload</code> may be a subview.</p>
+<h3 id="class-recordprofile"><code>class RecordProfile</code></h3>
+<pre><code class="language-cpp">virtual std::uint64_t id() const = 0;
+virtual std::uint16_t version() const = 0;
+virtual Status decode_block(ByteView block,
+                            const RecordDecodeVisitor&amp; visitor) const = 0;
+</code></pre>
+<p>A decoder validates concatenated records and invokes the visitor in block
+order. Return <code>corrupt</code> for malformed records. Respect visitor false as normal
+early termination. IDs and versions must match the partition metadata.</p>
+<h3 id="struct-recordquery"><code>struct RecordQuery</code></h3>
+<p>Contains <code>TimeRange time</code>, a vector of <code>selectors</code>, and block-level
+<code>QueryOptions</code>. An empty selector vector means every selector. Duplicate input
+selectors do not duplicate output.</p>
+<h3 id="query-records"><code>query_records()</code></h3>
+<pre><code class="language-cpp">Status query_records(const RingStore&amp;, const RecordQuery&amp;,
+                     const RecordProfile&amp;, const RecordVisitor&amp;);
+</code></pre>
+<p>This first selects candidate blocks by time domain/envelope, requires their
+profile ID/version to match, decodes records, then applies exact half-open time
+and selector filtering. It also verifies that the decoder emitted exactly the
+block's declared record count.</p>
+<p>Gap events are forwarded as <code>RecordEvent</code> with an empty/default <code>record</code> and
+the original block metadata/detail.</p>
+<h3 id="class-framedrecordv1"><code>class FramedRecordV1</code></h3>
+<p>Built-in record profile ID:</p>
+<pre><code class="language-cpp">constexpr std::uint64_t kFramedRecordV1ProfileId;
+</code></pre>
+<p>API:</p>
+<pre><code class="language-cpp">static Status encode(std::int64_t index_time_ns,
+                     std::uint64_t selector,
+                     std::uint16_t flags,
+                     ByteView payload,
+                     std::vector&lt;std::uint8_t&gt;* output);
+Status decode_block(ByteView, const RecordDecodeVisitor&amp;) const override;
+</code></pre>
+<p>The 32-byte envelope is little-endian and protects header plus payload with
+CRC32C. <code>encode()</code> replaces the output vector. The maximum payload is bounded
+by a 32-bit frame size and, in practice, by the volume's block limit.
+The payload view may refer to the current output vector; encoding remains
+well-defined because the new frame is built separately and swapped into place.</p>
+<p>Convenience append:</p>
+<pre><code class="language-cpp">Status append_framed_record(RingStore&amp;, std::int64_t index_time_ns,
+                            std::uint64_t selector, std::uint16_t flags,
+                            ByteView payload);
+</code></pre>
+<p>It encodes, checks the active FramedRecordV1 partition, preserves the active
+time domain in an <code>AppendContract</code>, and maps the unsynchronized-time flag.</p>
+<h2 id="asynchronous-writer">Asynchronous writer</h2>
+<h3 id="struct-asyncwriteroptions"><code>struct AsyncWriterOptions</code></h3>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Field</th>
+<th style="text-align:right" scope="col">Default</th>
+<th scope="col">Contract</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>queue_capacity_records</code></td>
+<td style="text-align:right">4096</td>
+<td>nonzero accepted-item bound</td>
+</tr>
+<tr>
+<td><code>queue_capacity_bytes</code></td>
+<td style="text-align:right">4 MiB</td>
+<td>nonzero copied-byte bound</td>
+</tr>
+<tr>
+<td><code>checkpoint_interval</code></td>
+<td style="text-align:right">1000 ms</td>
+<td>positive periodic durability interval</td>
+</tr>
+<tr>
+<td><code>monotonic_clock_ns</code></td>
+<td style="text-align:right">empty</td>
+<td>optional nonblocking/nonthrowing monotonic clock for deterministic tests</td>
+</tr>
+</tbody>
+</table></div>
+<p>The custom clock must be advanced externally. After advancing it, release any
+clock mutex and call <code>notify_clock_advanced()</code> so the worker re-evaluates its
+deadline. Production normally uses the default steady clock.</p>
+<h3 id="lifecycle">Lifecycle</h3>
+<pre><code class="language-cpp">AsyncWriter(RingStore&amp; store, const AsyncWriterOptions&amp; options);
+Status start();
+Status submit(ByteView, std::int64_t index_time_ns,
+              std::uint32_t record_flags = 0);
+Status submit_checked(ByteView, std::int64_t index_time_ns,
+                      const AppendContract&amp;,
+                      std::uint32_t record_flags = 0);
+Status checkpoint();
+Status stop();
+void notify_clock_advanced();
+</code></pre>
+<p><code>start()</code> validates options and starts one worker. Repeated start while running
+returns <code>busy</code>. A wrapper whose worker already failed cannot be restarted; open
+a fresh store and construct a new wrapper. Start also checks
+<code>RingStore::writer_status()</code>, so a closed or faulted store fails synchronously.</p>
+<p><code>submit*()</code> is thread-safe and nonblocking with respect to storage I/O. It
+copies accepted bytes. A full record or byte bound returns <code>busy</code> without
+accepting the item. Submit before start, during stop, or after stop returns
+<code>closed</code> after a clean lifecycle. If the worker failed, its original status has
+priority and is returned by later submit/checkpoint/start calls.</p>
+<p><code>checkpoint()</code> is a synchronous barrier: after success, every submit accepted
+before the call is processed and durable. It does not promise that concurrently
+accepted later items are included.</p>
+<p><code>stop()</code> stops acceptance, drains the queue, checkpoints, joins, and returns
+the background status. The destructor calls <code>stop()</code> but discards the result;
+production shutdown must call and check it explicitly.</p>
+<h3 id="state-and-metrics">State and metrics</h3>
+<pre><code class="language-cpp">std::size_t queued_records() const;
+std::size_t queued_bytes() const;
+Status background_status() const;
+AsyncWriterMetrics metrics() const;
+</code></pre>
+<p><code>AsyncWriterMetrics</code> fields:</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Group</th>
+<th scope="col">Fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Flow</td>
+<td><code>submitted_records</code>, <code>processed_records</code>, <code>durable_sequence</code></td>
+</tr>
+<tr>
+<td>Durability/errors</td>
+<td><code>checkpoint_calls</code>, <code>background_errors</code></td>
+</tr>
+<tr>
+<td>Backpressure/high water</td>
+<td><code>backpressure_events</code>, <code>maximum_queued_records</code>, <code>maximum_queued_bytes</code></td>
+</tr>
+<tr>
+<td>Latency</td>
+<td><code>maximum_queue_residence_ns</code>, <code>maximum_accepted_to_durable_ns</code>, <code>oldest_undurable_age_ns</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><code>durable_sequence</code> is the highest accepted wrapper sequence covered by a
+successful checkpoint, not a persistent record sequence. Queue residence
+excludes RingStore/backend work; accepted-to-durable includes it.</p>
+<p>On a background failure, the writer stores the first error, clears queued
+items, increments <code>background_errors</code>, and wakes barriers. Callers must surface
+the error and recreate the storage stack after recovery.</p>
+<h2 id="compatibility-and-extension-rules">Compatibility and extension rules</h2>
+<ul>
+<li>Treat the on-media major version, compression ID/version, record profile
+ID/version, time-domain ID, selector layout, and application flag meanings
+as separate compatibility axes.</li>
+<li>Add incompatible record encodings at a partition boundary; do not reinterpret
+historical bytes under a new profile version.</li>
+<li>Register compression codecs for every retained historical partition before
+enabling a new writer configuration. Record profiles have no store registry:
+<code>query_records()</code> handles one profile pair per call and returns <code>unsupported</code>
+on a candidate partition with another pair. For a range spanning profile
+versions, use <code>query_blocks()</code> and application-level dispatch through
+<code>BlockMetadata</code>, then perform exact record filtering in that layer.</li>
+<li>Unknown required on-media features fail open as <code>unsupported</code>.</li>
+<li>Keep explicit volume/writer IDs restricted to deterministic tests.</li>
+<li>Do not persist C++ object layouts directly; encode project records with
+fixed widths/endianness and explicit bounds.</li>
+</ul>
+<h2 id="api-integration-review-checklist">API integration review checklist</h2>
+<ul>
+<li>Only public headers under <code>include/tfdb</code> are included.</li>
+<li>All status returns are checked and status codes, not message strings, drive
+behavior.</li>
+<li>The backend lifetime exceeds the <code>RingStore</code>; the store lifetime exceeds
+<code>AsyncWriter</code>.</li>
+<li>Format is reachable only from explicit provisioning/reinitialization.</li>
+<li>The record/time-domain contract is chosen before writable open.</li>
+<li>Checked append/submit protects partition rotations.</li>
+<li><code>publish()</code> is never described or used as a durability boundary.</li>
+<li>Async <code>busy</code>, background failure, checkpoint barrier, and orderly stop have
+explicit policies.</li>
+<li>Query callbacks copy retained data and handle both gap kinds.</li>
+<li>Physical query order is not confused with timestamp order.</li>
+<li>Metrics and target-hardware qualification demonstrate the configured
+power-loss and endurance requirements.</li>
+</ul>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">6a0710dbc34934193e057433f05683cd80f63aab72f5fdc266b43aeb9079d844</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

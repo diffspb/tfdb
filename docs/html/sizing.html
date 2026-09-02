@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="cb45836377c8d4757fefc78927d47279d93972d6d3e22ac4b8280b007c15ee60">
+  <title>Sizing, loss bound, RAM, and eight-year endurance — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html" aria-current="page">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../sizing.md">docs/sizing.md</a>. The Markdown file is canonical.</p>
+      <h1 id="sizing-loss-bound-ram-and-eight-year-endurance">Sizing, loss bound, RAM, and eight-year endurance</h1>
+<p>No single default can prove retention or flash life for all projects. TFDB
+exposes the measurements needed to size a project and keeps the formulas
+explicit.</p>
+<h2 id="1-definitions">1. Definitions</h2>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Symbol</th>
+<th scope="col">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>P</code></td>
+<td>partition size</td>
+</tr>
+<tr>
+<td><code>I</code></td>
+<td>index reserve per partition</td>
+</tr>
+<tr>
+<td><code>B</code></td>
+<td>maximum raw block payload</td>
+</tr>
+<tr>
+<td><code>Q</code></td>
+<td>persistence quantum</td>
+</tr>
+<tr>
+<td><code>N</code></td>
+<td>complete partition count</td>
+</tr>
+<tr>
+<td><code>R</code></td>
+<td>measured framed input bytes/second at the core</td>
+</tr>
+<tr>
+<td><code>S</code></td>
+<td>stored payload bytes in one block after raw fallback</td>
+</tr>
+<tr>
+<td><code>F</code></td>
+<td>frame bytes actually written, <code>128 + S</code></td>
+</tr>
+<tr>
+<td><code>A</code></td>
+<td>address span consumed, <code>ceil(F/Q) × Q</code></td>
+</tr>
+<tr>
+<td><code>E</code></td>
+<td>serialized record-envelope bytes per second</td>
+</tr>
+<tr>
+<td><code>W_host</code></td>
+<td>successful bytes requested from the backend per second</td>
+</tr>
+<tr>
+<td><code>WA_fs</code></td>
+<td>filesystem allocation/journal amplification</td>
+</tr>
+<tr>
+<td><code>WA_ftl</code></td>
+<td>device/controller internal write amplification</td>
+</tr>
+</tbody>
+</table></div>
+<p>The data address capacity of one partition is:</p>
+<pre><code class="language-text">D = P - 4096 partition header - I - 4096 footer region
+</code></pre>
+<p>The index holds exactly <code>floor(I / 48)</code> block entries. The partition seals when
+either the next worst-case frame reservation cannot fit or the next index entry
+cannot fit. Data-capacity exhaustion sacrifices less than one worst-case aligned
+frame. Index exhaustion can leave a larger data remainder; both losses are
+deliberate consequences of fixed bounds.</p>
+<h2 id="2-retention">2. Retention</h2>
+<p>Measure block fill and compression with representative input. For a sequence of
+blocks, usable raw payload retention is:</p>
+<pre><code class="language-text">retained_raw_bytes = sum(raw_size for retained frames)
+retention_seconds  = retained_raw_bytes / R
+</code></pre>
+<p>Because the simple writer reserves one worst-case frame before starting every
+new block, an exact capacity calculation should replay the measured block-size
+sequence through that policy. For constant actual span <code>A</code> and worst-case span
+<code>A_worst</code>, a closer bound is:</p>
+<pre><code class="language-text">frames_by_data = 0,                                      if D &lt; A_worst
+                 1 + floor((D - A_worst) / A),           otherwise
+frames_per_partition       = min(frames_by_data, floor(I / 48))
+raw_per_partition          = frames_per_partition × average_raw_size
+maximum_retention_seconds  = N × raw_per_partition / R
+minimum_ring_phase_seconds = (N - 1) × raw_per_partition / R
+</code></pre>
+<p><code>N × raw_per_partition</code> is reached just before reuse. Immediately after the
+oldest slot becomes a nearly empty active partition, only approximately <code>N-1</code>
+full partitions are guaranteed. Retention requirements must use the minimum
+ring phase (or, preferably, the minimum from an exact replay across all phases),
+not the pre-rotation maximum. This constant-span expression is illustrative;
+use the measured distribution, not only an average, for sparse traffic and
+bursts. Every sparse checkpoint can create a small frame that still consumes
+one quantum of address space. Conversely, padding is not physically written,
+so address-space efficiency and host-write amplification are separate metrics.
+If the index fills first, an arbitrary remainder of the data region can remain
+unused; the fixed reserve makes this explicit rather than risking overflow.</p>
+<p>Example geometry from the earlier design discussion—64 MiB partition, 1 MiB
+index, 32 KiB raw block, 4 KiB quantum—has about 62.99 MiB of data address
+space. A full raw block consumes 36 KiB because its 128-byte header crosses the
+next 4 KiB boundary, so approximately 1791 such frames fit and require only
+about 84 KiB of index. The larger 1 MiB reserve is useful when frequent sparse
+checkpoints create 4 KiB spans. This is an intentional space-for-simplicity
+tradeoff, not hidden overhead.</p>
+<h2 id="3-configured-power-loss-bound">3. Configured power-loss bound</h2>
+<p>For the synchronous API, the application owns scheduling. For the async
+wrapper, a record is first accepted into a bounded queue. The bound to qualify
+is:</p>
+<pre><code class="language-text">accepted_to_durable_max
+  = checkpoint scheduling delay
+  + queue residence
+  + block publication time
+  + successful flush time
+</code></pre>
+<p>Choose a target <code>XXX</code> seconds and require, with safety margin:</p>
+<pre><code class="language-text">metrics.maximum_accepted_to_durable_ns &lt;= XXX × 1e9
+</code></pre>
+<p>under the worst qualified peak and sparse profiles. Also require zero sync
+errors and no unbounded backpressure. A timer interval of <code>XXX</code> alone is not a
+guarantee if producers can outrun the writer. On emergency power indication,
+<code>emergency_checkpoint()</code> still needs enough hold-up time for the observed
+worst-case publication plus flush; otherwise the normal periodic bound applies.</p>
+<p>Application acknowledgment semantics must be explicit:</p>
+<ul>
+<li>accepted acknowledgment permits loss until the next checkpoint;</li>
+<li>durable acknowledgment waits for the checkpoint barrier;</li>
+<li>published is useful for live visibility but is not a power-loss guarantee.</li>
+</ul>
+<h2 id="4-host-writes-and-index-overhead">4. Host writes and index overhead</h2>
+<p>In steady state each block writes <code>128 + stored_size</code> bytes. Padding to <code>Q</code> is not
+written. A sealed partition additionally writes:</p>
+<pre><code class="language-text">48 × block_count + 256 footer + 1024 next partition header
+</code></pre>
+<p>Volume headers are written only on format. Flushes may cause additional media
+traffic that byte counters cannot see.</p>
+<p>The library reports:</p>
+<ul>
+<li>framed input bytes;</li>
+<li>stored/raw block bytes;</li>
+<li>backend write calls and transferred bytes;</li>
+<li>flush count and duration;</li>
+<li>partition rotations;</li>
+<li>query/recovery read bytes.</li>
+</ul>
+<p>For a regular file, measure filesystem journal/allocation traffic separately
+on the final filesystem and mount configuration. For a block device, include
+partitioning/provisioning and controller behavior. Neither host count reveals
+<code>WA_ftl</code>.</p>
+<h2 id="5-eight-year-endurance-calculation">5. Eight-year endurance calculation</h2>
+<p>Eight Julian years are approximately 252,460,800 seconds. First calculate host
+writes from the worst credible long-term workload:</p>
+<pre><code class="language-text">host_bytes_8y = measured_W_host × 252460800
+</code></pre>
+<p>Translate application writes to the interface at which the endurance limit is
+specified. For a regular file, first estimate writes submitted to the device:</p>
+<pre><code class="language-text">device_interface_bytes = host_bytes_8y × WA_fs
+required_TBW          = device_interface_bytes × qualification_margin
+</code></pre>
+<p>Vendor TBW/DWPD normally counts host writes at the device interface; applying
+<code>WA_ftl</code> before comparing with such a limit double-counts the controller's
+internal amplification. If qualification instead uses a NAND-write/P/E model,
+then calculate:</p>
+<pre><code class="language-text">estimated_nand_bytes = device_interface_bytes × WA_ftl
+required_nand_bytes  = estimated_nand_bytes × qualification_margin
+</code></pre>
+<p>and compare that result with a NAND-level capacity/cycle model. A rough model
+when only program/erase cycles are available is:</p>
+<pre><code class="language-text">nominal_nand_endurance = usable_flash_bytes × rated_PE_cycles
+</code></pre>
+<p>but over-provisioning, static data, bad-block reserve, wear leveling, SLC cache,
+write amplification, and required end-of-life retention can dominate. A host
+ring does not guarantee even physical wear by itself because the FTL remaps it.</p>
+<p>As an illustrative scale only, a continuous 2 MiB/s framed stream produces
+about 529 TB in eight Julian years before filesystem/FTL amplification. That
+number immediately excludes many consumer eMMC parts even if the logical ring
+is only 128 GiB. Use the actual measured project rate and a part-specific
+endurance commitment.</p>
+<p>Qualification should record available device health counters throughout an
+accelerated write test, but such counters are not a substitute for destructive
+endurance and retention validation.</p>
+<h2 id="6-ram-bounds">6. RAM bounds</h2>
+<p>Ignoring allocator bookkeeping, the synchronous worst case is approximately:</p>
+<pre><code class="language-text">decoded_index_entry_bytes = implementation sizeof(IndexEntry)
+                           (64 bytes in the reference x86_64 C++ build;
+                            48 bytes is only the serialized media entry)
+
+writer &lt;= B raw builder
+        + codec max-compressed candidate
+        + (128 + max(B, compressed_used)) contiguous frame
+        + floor(I / 48) × decoded_index_entry_bytes
+
+reader per concurrent query &lt;= one stored block + one decoded block
+                             + one serialized partition index (at most I)
+                             + floor(I / 48) × decoded_index_entry_bytes
+                             + at most one copied active-index vector of the
+                               same decoded-entry bound
+
+open recovery transient &lt;= two footerless decoded-index vectors; older ones
+                          are released as slots are scanned, so this is O(I),
+                          not O(partition_count × I)
+
+async addition &lt;= configured queue byte capacity
+                + bounded per-record queue metadata
+                + one oldest-undurable timestamp
+</code></pre>
+<p>For TFDB PackBits the candidate bound is
+<code>B + ceil(B/128)</code>. The <code>none</code> codec skips that candidate copy. Multiple readers
+multiply reader memory; they do not pin media. Measure RSS with the final
+allocator and concurrency because vector capacity and thread stacks are not in
+the formulas.</p>
+<h2 id="7-recovery-and-query-i-o-bounds">7. Recovery and query I/O bounds</h2>
+<p>Normal open reads two 256-byte volume headers plus a 1024-byte header and
+256-byte footer from each partition. Every current-volume partition without a
+valid footer is scanned to its valid block prefix. A normal interrupted
+rotation should leave one; independent footer damage can require more.</p>
+<p>Lazy sealed queries read one index (at most <code>I</code>) and candidate frames. Strict
+open additionally reads all sealed indexes and blocks. Exact record filtering
+may read false-positive blocks selected by min/max time; selector filtering in
+v1 does not have a secondary media index.</p>
+<h2 id="8-project-sizing-procedure">8. Project sizing procedure</h2>
+<ol>
+<li>Capture representative and worst-case streams before choosing geometry.</li>
+<li>Include native framing, redundant senders, clock faults, service logs, and
+sparse idle periods.</li>
+<li>Run all workload profiles with candidate <code>P/I/B/Q</code>, compression, and
+checkpoint interval.</li>
+<li>Choose retention with margin after observing quantum/index waste.</li>
+<li>Verify peak drain rate and accepted-to-durable maximum.</li>
+<li>Calculate eight-year host bytes, then apply measured conservative physical
+amplification and endurance margin.</li>
+<li>Repeat on the exact filesystem and raw-device configurations.</li>
+<li>Validate with automated physical power cuts and accelerated wear/retention.</li>
+</ol>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">cb45836377c8d4757fefc78927d47279d93972d6d3e22ac4b8280b007c15ee60</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

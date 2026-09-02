@@ -1,0 +1,22 @@
+TFDB curated reference summary (informational, not hardware qualification)
+date=2026-09-01 timezone=Europe/Moscow
+kernel=Linux 6.6.87.2-microsoft-standard-WSL2 x86_64
+compiler=g++ 13.3.0
+source_bundle_sha256=e89903d93b09511ac3b49a3ff4107eb75efd34d600881b3c31f741ca7435e067
+digest_scope=sha256 of sorted sha256 list for Makefile, benchmarks (excluding reference-*), include, src, tests, tools
+command=PROFILE_RECORDS=50000 PROFILE_REPEATS=3 make benchmark
+raw_stdout=benchmarks/reference-2026-09-01.raw.log
+raw_stdout_sha256=d8aa2c1b4ac968e966fc043192b7d0c70e0ec11b4a1f36c8eb11be4082d08124
+geometry=size:16785408 partition:4194304 index:262144 block:32768 quantum:4096 checkpoint_records:1000 seed:20260901
+exceptions=sparse records:2000 checkpoint_records:1; hot-rotation and concurrent-read size:204800 records:5000 partition:65536 index:4096 block:256 checkpoint_records:10
+
+profile=tiny median_records_per_second=414546 host_write_amplification=1.00492 blocks=100 rotations=0 worst_max_sync_ns=6914357 worst_accepted_to_durable_ns=7715513 median_query_seconds=0.011392 median_recovery_seconds=0.00434449
+profile=mixed median_records_per_second=400628 host_write_amplification=1.00412 blocks=100 rotations=0 worst_max_sync_ns=3791311 worst_accepted_to_durable_ns=4634930 median_query_seconds=0.0128759 median_recovery_seconds=0.00521982
+profile=compressible median_records_per_second=394969 host_write_amplification=0.217073 blocks=250 rotations=0 worst_max_sync_ns=6090460 worst_accepted_to_durable_ns=6974942 median_query_seconds=0.024591 median_recovery_seconds=0.00299158
+profile=incompressible median_records_per_second=284288 host_write_amplification=0.959488 blocks=250 rotations=2 worst_max_sync_ns=9622935 worst_accepted_to_durable_ns=11578052 median_query_seconds=0.0344309 median_recovery_seconds=0.000343588
+profile=logs median_records_per_second=224200 host_write_amplification=0.978765 blocks=393 rotations=3 worst_max_sync_ns=12279981 worst_accepted_to_durable_ns=14383080 median_query_seconds=0.0505756 median_recovery_seconds=0.000195711
+profile=bad-time median_records_per_second=396716 host_write_amplification=1.004 blocks=100 rotations=0 worst_max_sync_ns=4770586 worst_accepted_to_durable_ns=5631416 median_query_seconds=0.013018 median_recovery_seconds=0.00533984
+profile=burst median_records_per_second=625195 host_write_amplification=1.00518-1.00520 blocks=159-160 rotations=1 worst_max_sync_ns=13706446 worst_accepted_to_durable_ns=63743915 worst_async_accepted_to_durable_ns=64087362 median_query_seconds=0.0224537 median_recovery_seconds=0.00282847 backpressure_events=0-53066 worst_queue_residence_ns=20193606
+profile=sparse median_records_per_second=648.531 host_write_amplification=4.35685 blocks=2000 rotations=2 worst_max_sync_ns=10965457 worst_accepted_to_durable_ns=10974181 median_query_seconds=0.01059 median_recovery_seconds=0.000092957
+profile=hot-rotation median_records_per_second=9953.31 host_write_amplification=2.35609 blocks=1546 rotations=118 worst_max_sync_ns=7322869 worst_accepted_to_durable_ns=7344876 median_query_seconds=0.00028635 median_recovery_seconds=0.000031078 retained_first_ordinal=4879 retained_records=121
+profile=concurrent-read median_records_per_second=9876.35 host_write_amplification=2.35609 blocks=1546 rotations=118 worst_max_sync_ns=4427148 worst_accepted_to_durable_ns=4455143 median_query_seconds=0.000224637 median_recovery_seconds=0.00002712 retained_first_ordinal=4879 retained_records=121 reader_iterations=288-326 reader_data_events=9156-10386 reader_records_validated=29542-33546 unexpected_gaps=0

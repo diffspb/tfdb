@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="70e78a4216efb793809979dd6240da3d5905138224851cdb4441f60a72d1e1fc">
+  <title>Architecture decision log — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html" aria-current="page">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../decisions.md">docs/decisions.md</a>. The Markdown file is canonical.</p>
+      <h1 id="architecture-decision-log">Architecture decision log</h1>
+<p>This log records important alternatives and their effects. Accepted decisions
+may be revisited before format v1 is declared stable.</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">ID</th>
+<th scope="col">Decision</th>
+<th scope="col">Alternatives rejected/deferred</th>
+<th scope="col">Main effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ADR-001</td>
+<td>Fixed volume split into a ring of large partitions</td>
+<td>Growing files; general DB/LSM</td>
+<td>Deterministic capacity and rotation; overwrite is explicit</td>
+</tr>
+<tr>
+<td>ADR-002</td>
+<td>Per-partition generation; no frequently updated global head</td>
+<td>Mutable superblock head pointer</td>
+<td>Low metadata wear; startup scans all small partition headers</td>
+</tr>
+<tr>
+<td>ADR-003</td>
+<td>Variable-length encoded blocks written sequentially</td>
+<td>Fixed physical slots</td>
+<td>Compression saves capacity and host bytes; recovery must validate lengths</td>
+</tr>
+<tr>
+<td>ADR-004</td>
+<td>CRC32C on every structural header and block payload</td>
+<td>Generation only; optional checksum</td>
+<td>Detects torn writes and latent corruption with negligible media overhead</td>
+</tr>
+<tr>
+<td>ADR-005</td>
+<td>Footer index is rebuildable acceleration data</td>
+<td>Index updated on every block</td>
+<td>Sequential data writes and low amplification; active startup scans one partition</td>
+</tr>
+<tr>
+<td>ADR-006</td>
+<td>Core accepts whole opaque records plus an index timestamp</td>
+<td>Core owns all project schemas; prebuilt blocks only</td>
+<td>Core can assemble safe blocks without fixing telemetry representation</td>
+</tr>
+<tr>
+<td>ADR-007</td>
+<td>Block query below record parsing/filtering</td>
+<td>Message IDs embedded in the volume format</td>
+<td>Keeps storage generic; project codec is required for message-level tools</td>
+</tr>
+<tr>
+<td>ADR-008</td>
+<td>Per-block min/max time, physical result order</td>
+<td>Globally sorted timestamp tree</td>
+<td>No false negatives with modest disorder; false-positive block reads are acceptable</td>
+</tr>
+<tr>
+<td>ADR-009</td>
+<td>Raw time is never corrected; anomaly is an aggregate block flag</td>
+<td>Rewrite time; discard bad records</td>
+<td>Preserves evidence and keeps schema-independent core; exact bad record needs upper codec</td>
+</tr>
+<tr>
+<td>ADR-010</td>
+<td>Readers never pin rotation</td>
+<td>Reference-counted partition leases</td>
+<td>Writer cannot be stalled; reader receives an explicit overwritten gap</td>
+</tr>
+<tr>
+<td>ADR-011</td>
+<td>Checkpoint closes the partial RAM block before <code>fdatasync</code></td>
+<td>Sync only already-written full blocks</td>
+<td>A configured loss bound also holds for sparse traffic, at some block overhead</td>
+</tr>
+<tr>
+<td>ADR-012</td>
+<td>Synchronous core plus optional background wrapper</td>
+<td>Hidden thread in every writer; Linux AIO</td>
+<td>Simple deterministic core and portable C++14 API; async wrapper owns queue/backpressure</td>
+</tr>
+<tr>
+<td>ADR-013</td>
+<td>Unknown optional features are skipped; unknown required features fail</td>
+<td>Interpret unknown data heuristically</td>
+<td>Safe forward compatibility and independent Rust implementation</td>
+</tr>
+<tr>
+<td>ADR-014</td>
+<td>Normal open uses valid prefix; verify/salvage are separate</td>
+<td>Automatic scan past interior corruption</td>
+<td>Predictable operation without silently mixing questionable data</td>
+</tr>
+<tr>
+<td>ADR-015</td>
+<td>File and block device share the positional-I/O backend</td>
+<td>Separate formats/backends</td>
+<td>Same recovery semantics; hardware durability remains a deployment property</td>
+</tr>
+<tr>
+<td>ADR-016</td>
+<td>Random 128-bit format-incarnation ID is separate from project identity</td>
+<td>Clock/PID-derived or stable volume ID</td>
+<td>Prevents stale data resurrection after reformat; formatting requires <code>getrandom()</code></td>
+</tr>
+<tr>
+<td>ADR-017</td>
+<td>CRC32C is mandatory on live reads; generation is rechecked after index acquisition, payload read, and apparent validation failure</td>
+<td>Optional query checksum; classifying CRC failure without a generation recheck</td>
+<td>Reader/rotation races become explicit overwrite gaps, while unchanged-generation damage remains corruption</td>
+</tr>
+<tr>
+<td>ADR-018</td>
+<td>Block starts are separated by a power-of-two persistence quantum</td>
+<td>Dense byte packing; fixed block slots</td>
+<td>Simple recovery/isolation with bounded alignment waste; quantum is not a physical atomicity claim</td>
+</tr>
+<tr>
+<td>ADR-019</td>
+<td>Default open is lazy; strict open eagerly validates sealed payloads, footer summaries, and every recovered footerless prefix</td>
+<td>One fixed integrity policy</td>
+<td>Fast normal startup and an explicit higher-assurance service level share one format</td>
+</tr>
+<tr>
+<td>ADR-020</td>
+<td>Buffered positional I/O plus explicit <code>fdatasync</code> in v1</td>
+<td><code>O_DIRECT</code>; <code>O_DSYNC</code> on every write</td>
+<td>No platform-specific buffer alignment, checkpoints remain configurable; page-cache effects must be measured</td>
+</tr>
+<tr>
+<td>ADR-021</td>
+<td>Advisory exclusive writer lock; readers never lock out rotation</td>
+<td>Uncoordinated writers; reader leases</td>
+<td>Prevents ordinary multi-process writer corruption while preserving live inspection</td>
+</tr>
+<tr>
+<td>ADR-022</td>
+<td>Full fixed-size v1.0 structures and rejection of future minor versions</td>
+<td>Guessing prefix-compatible structures</td>
+<td>Conservative independent implementations; future additive rules require a specification update</td>
+</tr>
+<tr>
+<td>ADR-023</td>
+<td>Implement optional FramedRecordV1 outside block format</td>
+<td>Mandatory common record envelope</td>
+<td>Exact selector/time queries are available without taxing self-framing project protocols</td>
+</tr>
+<tr>
+<td>ADR-024</td>
+<td>Keep telemetry/log retention isolation as a deployment decision</td>
+<td>Implicit priority inside one ring</td>
+<td>Same storage code supports logs; separate volumes prevent log storms evicting critical telemetry</td>
+</tr>
+<tr>
+<td>ADR-025</td>
+<td>Chain adjacent blocks with random per-open 128-bit writer IDs</td>
+<td>Resume using generation/sequence alone; seal a large partition on every boot</td>
+<td>Prevents stale-suffix resurrection across two crashes while preserving partition capacity; adds 32 bytes per block</td>
+</tr>
+<tr>
+<td>ADR-026</td>
+<td>Typed append atomically checks record profile and time domain after auto-rotation</td>
+<td>Check then call raw append</td>
+<td>A configuration boundary cannot mislabel a typed record; rejection may still publish/rotate the preceding full block</td>
+</tr>
+<tr>
+<td>ADR-027</td>
+<td>Domain zero is physical-scan only, never a numeric range wildcard</td>
+<td>Compare one interval across unrelated clocks</td>
+<td>No accidental comparison of incomparable clocks; callers use <code>scan_blocks()</code></td>
+</tr>
+<tr>
+<td>ADR-028</td>
+<td>Writable open rejects a damaged header with current-volume block/footer evidence</td>
+<td>Guess generation or silently overwrite the damaged slot</td>
+<td>Prevents generation collision and stale-data resurrection; lazy read-only inspection remains available</td>
+</tr>
+<tr>
+<td>ADR-029</td>
+<td>Async deadline and age metrics use one monotonic clock, with an injectable clock/wakeup seam</td>
+<td>Real sleeps in deterministic tests; separate timer and metric clocks</td>
+<td>Exact loss-bound tests include backend stalls without changing the media format or production thread model</td>
+</tr>
+<tr>
+<td>ADR-030</td>
+<td>Async timer uses elapsed unsigned time from the last checkpoint, bounded wait chunks, and rejects millisecond intervals that cannot fit in <code>uint64_t</code> nanoseconds</td>
+<td>Saturating absolute deadlines; signed <code>duration_cast</code>; one enormous <code>wait_for</code></td>
+<td>No conversion/library-internal overflow or repeated checkpoint loop when an injected clock reaches <code>UINT64_MAX</code></td>
+</tr>
+<tr>
+<td>ADR-031</td>
+<td>Load qualification uses a bounded persisted-write oracle and capped deterministic latency reservoirs</td>
+<td>Retain every generated payload; validate only whatever a query happens to return</td>
+<td>Exact retention-window checks and stable memory use remain practical for long rotation workloads</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="open-decisions-before-format-freeze">Open decisions before format freeze</h2>
+<ul>
+<li>Whether format v1 ships the simple PackBits codec only or also a reviewed
+dependency-free LZ4 block implementation.</li>
+<li>The block-summary callback and media allocation contract for future
+project-specific value indexes.</li>
+<li>Whether the proposed dual-clock logging profile belongs in this repository
+or a companion schema package.</li>
+<li>Whether very large sealed indexes need a paged reader before format freeze;
+this does not require a media change but affects peak RAM.</li>
+</ul>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">70e78a4216efb793809979dd6240da3d5905138224851cdb4441f60a72d1e1fc</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="4088c80e8fdeaea6b34950b71610461ace057c6d0a59eaec577c5abaec7a0506">
+  <title>Application logs in TFDB — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html" aria-current="page">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../logs.md">docs/logs.md</a>. The Markdown file is canonical.</p>
+      <h1 id="application-logs-in-tfdb">Application logs in TFDB</h1>
+<p>TFDB's block layer can store logs without a separate persistence mechanism.
+That is attractive because log bursts, crash recovery, time problems, and
+rotation are already handled. It does not mean telemetry and logs should
+always share one volume.</p>
+<h2 id="integration-levels">Integration levels</h2>
+<h3 id="existing-binary-log-record">Existing binary log record</h3>
+<p>If a project already has a length-delimited binary log event containing its
+timestamp and component ID, pass one complete event to <code>RingStore::append()</code>
+and register a project record-profile ID. This has the least overhead and
+retains the original evidence.</p>
+<h3 id="framedrecordv1">FramedRecordV1</h3>
+<p>For plain text or arbitrary blobs, <code>FramedRecordV1</code> supplies framing, whole-
+record CRC, application timestamp, 64-bit selector, and flags. Use the selector
+as a stable component/channel ID. Severity and structured fields remain in the
+payload. This mode is implemented and used by the <code>logs</code> load-generator
+profile.</p>
+<h3 id="future-common-logrecord-profile">Future common LogRecord profile</h3>
+<p>A cross-project log standard should be a record profile, not fields in every
+TFDB block. A candidate profile needs at least:</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Field</th>
+<th scope="col">Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>total length and profile version</td>
+<td>bounded skip and evolution</td>
+</tr>
+<tr>
+<td>realtime nanoseconds</td>
+<td>operator-facing time and normal range query</td>
+</tr>
+<tr>
+<td>monotonic nanoseconds</td>
+<td>order within one boot when realtime is wrong</td>
+</tr>
+<tr>
+<td>128-bit boot/session ID</td>
+<td>prevents comparing monotonic values across boots</td>
+</tr>
+<tr>
+<td>64-bit component/channel ID</td>
+<td>stable filter key</td>
+</tr>
+<tr>
+<td>severity and quality flags</td>
+<td>diagnostics and optional future index</td>
+</tr>
+<tr>
+<td>payload encoding ID</td>
+<td>UTF-8 text, CBOR/project binary, or template arguments</td>
+</tr>
+<tr>
+<td>optional template/event ID</td>
+<td>compact repeated messages</td>
+</tr>
+<tr>
+<td>payload and whole-record CRC</td>
+<td>exact preservation and salvage</td>
+</tr>
+</tbody>
+</table></div>
+<p>This envelope is intentionally not frozen in v1. For short telemetry it would
+be excessive; typical log messages are large enough that its overhead is less
+important. A future version needs independent C++/Rust vectors before getting
+a persistent profile ID.</p>
+<h2 id="clock-handling">Clock handling</h2>
+<p>Logs written before clock synchronization must not be discarded or rewritten.
+The recommended exporter algorithm is:</p>
+<ol>
+<li>group records by boot/session ID;</li>
+<li>preserve physical record order as the primary evidence;</li>
+<li>find clock-synchronization anchors containing both realtime and monotonic
+values;</li>
+<li>estimate wall time on each side of an anchor using monotonic deltas;</li>
+<li>label reconstructed values as estimates and retain the original timestamp;</li>
+<li>never compare monotonic values belonging to different boot IDs.</li>
+</ol>
+<p>The common block index remains based on the application-selected primary time.
+Blocks with unsynchronized or anomalous time carry flags, so tools can include
+or highlight questionable intervals. A physical scan is always available when
+a wall-time query cannot describe the desired period.</p>
+<h2 id="retention-and-overload">Retention and overload</h2>
+<p>Logs and telemetry should share a volume only if all of these policies match:</p>
+<ul>
+<li>retention horizon;</li>
+<li>acceptable loss interval;</li>
+<li>privacy/access controls;</li>
+<li>peak-rate budget;</li>
+<li>overwrite priority.</li>
+</ul>
+<p>A debug log storm must not evict safety telemetry unexpectedly. Separate fixed
+volumes are the simplest isolation. If they share one volume, the application
+must enforce admission control before TFDB; the synchronous core intentionally
+has one writer and no priority scheduler. The async wrapper reports queue
+backpressure and accepted-to-durable latency.</p>
+<p>Text and template logs often compress well with dictionary/match codecs. The
+dependency-free v1 PackBits codec only captures adjacent equal-byte runs and
+barely changed the reference log workload, so it must not be used to predict a
+general text-compression gain. Binary attachments and already compressed
+payloads usually do not compress; TFDB's per-block raw fallback avoids
+expansion. Large attachments should normally live in a separate record/profile
+or store so a single item cannot dominate block and retention sizing.</p>
+<h2 id="security-and-privacy">Security and privacy</h2>
+<p>CRC32C detects accidental corruption; it provides neither confidentiality nor
+authenticity. Logs may contain credentials or personal data. Encryption,
+redaction, key rotation, authenticated export, and secure erase are deployment
+requirements outside media format v1. A circular overwrite is not proof that
+old NAND cells are physically unrecoverable behind an FTL.</p>
+<h2 id="qualification-profile">Qualification profile</h2>
+<p>The <code>logs</code> workload emits variable-size repeated text with component selectors.
+A project log qualification should additionally include multiline data, NUL
+and invalid UTF-8 bytes, maximum-size records, severity bursts, unique random
+messages, and simultaneous telemetry load. Report retention, compression,
+host-write amplification, queue residence, accepted-to-durable latency, query
+latency, and CPU use rather than relying only on average throughput.</p>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">4088c80e8fdeaea6b34950b71610461ace057c6d0a59eaec577c5abaec7a0506</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

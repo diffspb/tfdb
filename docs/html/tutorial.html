@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="887af197191656416b8c67394a9eb219a1b180cf35f18e2e9b84dca5605519e2">
+  <title>TFDB integration tutorial — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="tutorial.html" aria-current="page">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../tutorial.md">docs/tutorial.md</a>. The Markdown file is canonical.</p>
+      <h1 id="tfdb-integration-tutorial">TFDB integration tutorial</h1>
+<p>TFDB means <strong>Telemetry Flash DB</strong>. It is an embedded C++14 library for a
+single telemetry or log writer, concurrent readers, bounded recovery, and
+fixed-size flash-backed retention. This tutorial starts with a runnable store
+and then turns it into a production integration.</p>
+<p>The canonical API reference is <a href="api.html"><code>api.md</code></a>. Storage sizing and the
+durability model are developed in <a href="sizing.html"><code>sizing.md</code></a> and
+<a href="architecture.html"><code>architecture.md</code></a>.</p>
+<h2 id="1-choose-the-integration-shape">1. Choose the integration shape</h2>
+<p>Make four decisions before writing adapters:</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Decision</th>
+<th scope="col">Simple default</th>
+<th scope="col">Choose the other path when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Record format</td>
+<td><code>FramedRecordV1</code></td>
+<td>project records already have unambiguous self-framing, timestamp, and selector</td>
+</tr>
+<tr>
+<td>Writer</td>
+<td>synchronous <code>RingStore</code></td>
+<td>producers must not perform storage I/O and bounded asynchronous backpressure is acceptable</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td><code>FileStorage</code></td>
+<td>the application already has a storage abstraction with equivalent positional-I/O and flush guarantees</td>
+</tr>
+<tr>
+<td>Reader</td>
+<td><code>query_records()</code></td>
+<td>the consumer wants whole physical blocks and will decode or sort them elsewhere</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>FramedRecordV1</code> is an optional 32-byte envelope. It supplies a length,
+application-provided index timestamp, 64-bit selector, flags, payload length,
+and CRC. Native self-framing telemetry can be appended directly and decoded by
+a project-specific <code>RecordProfile</code>, avoiding double framing.</p>
+<p>For a first integration, use <code>FramedRecordV1</code>, the synchronous writer, and a
+regular file. Change one layer at a time after the lifecycle works.</p>
+<h2 id="2-build-and-link">2. Build and link</h2>
+<p>Build the dependency-free static library on Linux:</p>
+<pre><code class="language-sh">make
+</code></pre>
+<p>Compile application code as C++14, add <code>include/</code> to the include path, link
+<code>build/libtfdb.a</code>, and enable pthreads:</p>
+<pre><code class="language-sh">c++ -std=c++14 -pthread -I/path/to/tfdb/include app.cpp \
+    /path/to/tfdb/build/libtfdb.a -o app
+</code></pre>
+<p>The repository contains two executable examples:</p>
+<pre><code class="language-sh">make -C examples check
+</code></pre>
+<p>This builds and runs:</p>
+<ul>
+<li><a href="../../examples/quickstart.cpp"><code>examples/quickstart.cpp</code></a>: format, synchronous
+append, checkpoint, selector/time query, and graceful close;</li>
+<li><a href="../../examples/async_writer.cpp"><code>examples/async_writer.cpp</code></a>: bounded queue,
+checked submit, durability barrier, metrics, and shutdown.</li>
+</ul>
+<p>Both examples require a path that does not already exist. They never overwrite
+an existing store.</p>
+<p>The shorter fragments below focus on one API decision at a time: <code>report()</code>
+and <code>check()</code> stand for application helpers that log
+<code>status_code_name(status.code())</code> plus <code>status.message()</code> and propagate every
+failure. The linked example translation units contain the complete includes,
+variables, and checked control flow.</p>
+<h2 id="3-provision-a-store-once">3. Provision a store once</h2>
+<p>Formatting is a provisioning or explicit reinitialization operation. Do not
+put it unconditionally in normal application startup.</p>
+<pre><code class="language-cpp">std::shared_ptr&lt;tfdb::FileStorage&gt; storage;
+tfdb::Status status = tfdb::FileStorage::create(
+    path, fixed_size, false, &amp;storage);  // false: refuse to overwrite
+if (!status.ok()) return report(status);
+
+tfdb::VolumeOptions volume;
+volume.partition_size = 64ull * 1024ull * 1024ull;
+volume.index_region_size = 1024u * 1024u;
+volume.max_block_payload = 32u * 1024u;
+volume.persistence_quantum = 4096u;
+status = tfdb::RingStore::format(*storage, volume);
+if (!status.ok()) return report(status);
+</code></pre>
+<p>For an existing block device, use
+<code>FileStorage::open_existing(device_path, true, &amp;storage)</code> and call <code>format()</code>
+only after the application has separately established that destructive
+initialization is intended. Before that call, deployment tooling must verify
+the exact device identity and expected size, confirm that it is unmounted and
+not in use, and establish exclusive ownership by TFDB. The advisory writer
+lock protects only cooperating processes. <code>FileStorage</code> accepts only regular
+files and block devices.</p>
+<p>Geometry is immutable for the volume:</p>
+<ul>
+<li>storage must contain at least two partitions after the volume prefix;</li>
+<li><code>persistence_quantum</code> must be a power of two and no larger than 4096;</li>
+<li>partition and index sizes must be quantum multiples;</li>
+<li>the data region must fit one worst-case block;</li>
+<li>the index reserve must fit the number of expected blocks.</li>
+</ul>
+<p>Do not copy tutorial geometry into production unchanged. Calculate retention,
+write amplification, index reserve, and eight-year endurance with
+<a href="sizing.html"><code>sizing.md</code></a>, then qualify them on the target eMMC/NAND controller.</p>
+<h2 id="4-open-an-existing-store">4. Open an existing store</h2>
+<p>Normal startup opens the already provisioned file or block device and lets
+<code>RingStore::open()</code> recover the current ring:</p>
+<pre><code class="language-cpp">std::shared_ptr&lt;tfdb::FileStorage&gt; storage;
+tfdb::Status status =
+    tfdb::FileStorage::open_existing(path, true, &amp;storage);
+if (!status.ok()) return report(status);
+
+tfdb::OpenOptions options;
+options.writable = true;
+options.next_partition.record_format_id = tfdb::kFramedRecordV1ProfileId;
+options.next_partition.record_format_version = 1;
+options.next_partition.time_domain_id = 1;
+options.next_partition.compression = tfdb::CompressionId::none;
+
+std::unique_ptr&lt;tfdb::RingStore&gt; store;
+status = tfdb::RingStore::open(storage, options, &amp;store);
+if (!status.ok()) return report(status);
+</code></pre>
+<p><code>next_partition</code> is the contract used if open must create a partition and for
+later automatic rotations. Existing partitions retain the options recorded in
+their own headers. This is what allows configuration and software updates
+without migrating old data.</p>
+<p>Only one writable <code>FileStorage</code> can hold the advisory exclusive lock. Any
+number of readers may open the media read-only, but applications should prefer
+queries through the writer-owned <code>RingStore</code> when possible so recovery state
+and codecs are consistent.</p>
+<p>Use <code>verify_payloads_on_open = true</code> for strict startup validation. It reads
+and CRC-checks every reachable block and exercises its compression decoder and
+declared raw size, so it increases startup I/O. It does not validate native
+record framing or application schemas; record queries do that through a
+<code>RecordProfile</code>. The default performs bounded structural recovery and defers
+full block payload reads to queries.</p>
+<h2 id="5-map-application-telemetry-to-records">5. Map application telemetry to records</h2>
+<p>TFDB deliberately does not prescribe the payload schema. Define these project
+contracts outside the library:</p>
+<ol>
+<li>a stable <code>record_format_id</code> and version;</li>
+<li>a stable <code>time_domain_id</code> for the application-provided index time;</li>
+<li>a 64-bit selector mapping if record-level filtering is required;</li>
+<li>payload serialization and schema/version lookup;</li>
+<li>the policy for unsynchronized and anomalous time.</li>
+</ol>
+<p>A useful selector packs stable fields such as source address, Linux service,
+and message identifier. The exact bit layout belongs to the project protocol,
+not to TFDB. Never derive it from a transient process ID or startup order.</p>
+<p>Use arrival time at the storage service as <code>index_time_ns</code> when source clocks
+can start in 1970 or otherwise become unreliable. Preserve the source-provided
+timestamp inside the payload for later diagnosis or repair. This keeps the
+physical/time index useful even when one producer clock is wrong.</p>
+<p>For <code>FramedRecordV1</code>:</p>
+<pre><code class="language-cpp">tfdb::Status status = tfdb::append_framed_record(
+    *store,
+    arrival_time_ns,
+    selector,
+    source_time_is_unsynchronized ? tfdb::kRecordFlagUnsynchronizedTime : 0,
+    tfdb::ByteView(payload));
+</code></pre>
+<p><code>append_framed_record()</code> verifies that the active partition still has the
+FramedRecordV1 profile and expected time domain. This matters when a record
+causes automatic rotation.</p>
+<p>The optional <code>allowed_backward_skew_ns</code> and <code>allowed_forward_step_ns</code>
+thresholds diagnose suspicious adjacent index timestamps. A violation sets
+<code>kBlockFlagTimeAnomaly</code>; the record is still retained. Negative thresholds
+disable the corresponding test. Record order is always arrival/append order,
+not timestamp order.</p>
+<h2 id="6-understand-publish-and-durability">6. Understand publish and durability</h2>
+<p>The synchronous lifecycle has three distinct states:</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Call</th>
+<th scope="col">Effect</th>
+<th style="text-align:right" scope="col">Durable after successful return?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>append()</code> / <code>append_checked()</code></td>
+<td>copies one whole record into the RAM block builder; may publish a previous full block</td>
+<td style="text-align:right">no</td>
+</tr>
+<tr>
+<td><code>publish()</code></td>
+<td>emits the current builder as a complete block</td>
+<td style="text-align:right">no</td>
+</tr>
+<tr>
+<td><code>checkpoint()</code></td>
+<td>publishes the tail and calls backend <code>flush()</code></td>
+<td style="text-align:right">yes, according to the backend/device contract</td>
+</tr>
+<tr>
+<td><code>close()</code></td>
+<td>graceful final checkpoint and rejects later mutations</td>
+<td style="text-align:right">yes</td>
+</tr>
+</tbody>
+</table></div>
+<p>The destructor intentionally does not checkpoint. Destruction is not an error
+reporting channel, and pretending it is a durability boundary would hide
+failures. Always call and check <code>close()</code> on graceful shutdown.</p>
+<p>To bound power-loss exposure to <code>X</code> seconds, the application must successfully
+checkpoint at least every <code>X</code> seconds under the qualified worst-case workload.
+Observe <code>StoreMetrics::oldest_undurable_age_ns</code>,
+<code>max_accepted_to_durable_ns</code>, <code>sync_errors</code>, and <code>max_sync_duration_ns</code>. The
+timer alone is not evidence; queue residence and device flush latency count.</p>
+<p>After any write or flush error, treat the writer as faulted. Stop accepting
+upstream data according to the system policy, preserve the original <code>Status</code>,
+and reopen/recover a new <code>RingStore</code> before resuming.</p>
+<h2 id="7-use-the-bounded-asynchronous-writer">7. Use the bounded asynchronous writer</h2>
+<p><code>AsyncWriter</code> owns a worker thread but not the <code>RingStore</code>. The store and its
+backend must outlive the wrapper.</p>
+<pre><code class="language-cpp">tfdb::AsyncWriterOptions options;
+options.queue_capacity_records = 4096;
+options.queue_capacity_bytes = 4u * 1024u * 1024u;
+options.checkpoint_interval = std::chrono::milliseconds(1000);
+
+tfdb::AsyncWriter writer(*store, options);
+check(writer.start());
+
+tfdb::AppendContract contract;
+contract.record_format_id = my_profile_id;
+contract.record_format_version = my_profile_version;
+contract.time_domain_id = my_time_domain_id;
+
+check(writer.submit_checked(tfdb::ByteView(encoded_record), index_time_ns,
+                            contract, flags));
+check(writer.checkpoint());  // barrier for every prior successful submit
+check(writer.stop());        // drains and checkpoints before joining
+check(store-&gt;close());
+</code></pre>
+<p><code>submit()</code> and <code>submit_checked()</code> copy the input before returning. Calls may
+come from multiple producer threads. If either queue bound would be exceeded,
+the call returns <code>StatusCode::busy</code>; it does not silently drop or block. Decide
+outside TFDB whether to retry, shed lower-priority data, or apply upstream
+backpressure.</p>
+<p>Poll <code>background_status()</code> and metrics in service health reporting. A worker
+error clears the remaining queue, wakes checkpoint waiters, and requires a new
+store/writer instance. The wrapper retains the original background status and
+<code>stop()</code> returns it; the destructor invokes <code>stop()</code> but discards that result.</p>
+<h2 id="8-query-records">8. Query records</h2>
+<p>Record queries apply exact half-open timestamp and selector filtering after a
+coarse block-index selection:</p>
+<pre><code class="language-cpp">tfdb::RecordQuery query;
+query.time.begin_ns = begin_ns;
+query.time.end_ns = end_ns;  // [begin_ns, end_ns)
+query.time.time_domain_id = 1;
+query.selectors = requested_selectors;  // empty means every selector
+
+tfdb::FramedRecordV1 profile;
+tfdb::Status status = tfdb::query_records(
+    *store, query, profile,
+    [&amp;](const tfdb::RecordEvent&amp; event) {
+      if (event.kind != tfdb::BlockEventKind::data) {
+        report_gap(event.kind, event.block, event.detail);
+        return true;
+      }
+      consume_now(event.record);  // views are borrowed for this callback only
+      return true;
+    });
+</code></pre>
+<p>Important query contracts:</p>
+<ul>
+<li>results are in physical ring order; timestamps may be mixed and are not
+sorted;</li>
+<li><code>RecordView::encoded</code>, <code>RecordView::payload</code>, and <code>BlockEvent::data</code> are valid
+only during their callback;</li>
+<li>returning <code>false</code> stops normally and the query returns <code>Status::Ok()</code> unless
+decoding already failed;</li>
+<li>readers can lose a race with rotation; <code>overwritten_gap</code> is expected when a
+reader cannot keep up;</li>
+<li>damaged reachable media is reported as <code>corrupt_gap</code> when
+<code>continue_on_gap</code> is true;</li>
+<li>set <code>continue_on_gap = false</code> when the first gap must terminate the query;</li>
+<li>CRC verification is mandatory; <code>verify_payload_crc</code> remains only for source
+compatibility and is ignored.</li>
+</ul>
+<p>If a consumer wants candidate blocks, decompressed bytes, and physical
+metadata, call <code>query_blocks()</code>. Use <code>scan_blocks()</code> to walk every reachable
+block across all time domains. Block-level time selection is necessarily
+coarse: a block is returned if its <code>[min_time_ns, max_time_ns]</code> overlaps the
+query, even when no individual record matches.</p>
+<h2 id="9-use-a-native-record-format">9. Use a native record format</h2>
+<p>If project records are already concatenable, append their complete encoded
+bytes directly. Every appended item must be whole, non-empty, and no larger
+than <code>max_block_payload</code>.</p>
+<p>Implement <code>RecordProfile</code> to decode one decompressed block:</p>
+<pre><code class="language-cpp">class ProjectProfile final : public tfdb::RecordProfile {
+ public:
+  std::uint64_t id() const override { return kProjectProfileId; }
+  std::uint16_t version() const override { return 3; }
+
+  tfdb::Status decode_block(
+      tfdb::ByteView block,
+      const tfdb::RecordDecodeVisitor&amp; visitor) const override {
+    // Validate each frame before exposing it. Return corrupt for malformed
+    // lengths/checksums, and stop successfully when visitor(record) is false.
+    // RecordView fields must point into storage valid for this call only.
+  }
+};
+</code></pre>
+<p>Open with that ID/version, construct a nonzero <code>AppendContract</code>, and prefer
+<code>append_checked()</code> or <code>submit_checked()</code>. The decoder must emit exactly the
+block header's record count; <code>query_records()</code> rejects a mismatch as
+corruption.</p>
+<p>Keep record-profile IDs globally stable across projects that exchange media.
+A new incompatible record encoding requires a new version and starts at a
+partition boundary. Register every historical compression codec in
+<code>OpenOptions</code> before open. Record profiles have no built-in registry:
+<code>query_records()</code> accepts one profile and returns <code>unsupported</code> if a candidate
+partition uses another ID/version. To read a time range spanning profile
+versions, use <code>query_blocks()</code> and dispatch/decode each block in the application
+from <code>BlockMetadata::record_format_id</code> and <code>record_format_version</code>, including
+exact record filtering there.</p>
+<h2 id="10-change-configuration-at-a-partition-boundary">10. Change configuration at a partition boundary</h2>
+<p>Compression, record profile, time domain, and anomaly thresholds are recorded
+per partition.</p>
+<ul>
+<li><code>set_next_partition_options()</code> changes what the next automatic rotation will
+use; it does not alter the active partition.</li>
+<li><code>rotate()</code> publishes and seals the current partition, durably writes its
+index/footer, then starts the requested configuration immediately.</li>
+<li>an automatic rotation uses the most recently configured next options.</li>
+</ul>
+<p>An asynchronous producer can have queued records while configuration changes.
+Use <code>submit_checked()</code> with the contract attached to each queued record; a
+stale record then fails explicitly instead of being written under the wrong
+profile or time domain.</p>
+<p>The built-in dependency-free codecs are <code>none</code> and PackBits. Compression is
+selected per block only when the compressed representation is smaller. The
+<code>lz4_block</code> identifier is reserved but has no built-in implementation; supply
+a matching <code>CompressionCodec</code> in <code>OpenOptions::compression_codecs</code> before
+opening media that uses an external codec.</p>
+<h2 id="11-store-application-logs">11. Store application logs</h2>
+<p>Treat logs as structured records rather than an unbounded text stream. A
+selector can encode service, severity, or schema; the payload can contain the
+message and structured attributes. Decide whether logs and telemetry share a
+volume based on retention and failure-domain requirements.</p>
+<p>Do not place secrets in logs merely because the store is local. TFDB v1 does
+not provide encryption, authentication, redaction, or secure erasure. The full
+log design checklist is in <a href="logs.html"><code>logs.md</code></a>.</p>
+<h2 id="12-implement-a-custom-backend">12. Implement a custom backend</h2>
+<p>Derive from <code>Storage</code> only when <code>FileStorage</code> is not suitable. The backend must:</p>
+<ul>
+<li>provide a fixed nonzero <code>size()</code> for the open lifetime;</li>
+<li>support concurrent positional readers and one positional writer;</li>
+<li>report partial progress accurately through <code>IoResult</code>;</li>
+<li>make no-progress success impossible;</li>
+<li>make every preceding successful write durable when <code>flush()</code> succeeds;</li>
+<li>return a stable error when durability cannot be established.</li>
+</ul>
+<p>TFDB's <code>read_exact()</code> and <code>write_exact()</code> handle bounded short transfers and
+retry zero-progress <code>interrupted</code> calls. They cannot repair a backend that lies
+about durability or transfer length.</p>
+<p>Use <code>MemoryStorage</code> and <code>CountingStorage</code> in integration tests to inject
+failures, model crash persistence, and assert exact I/O. They are support
+backends, not replacements for target-device power-cut qualification.</p>
+<h2 id="13-operational-checks">13. Operational checks</h2>
+<p>After building the supplied tools:</p>
+<pre><code class="language-sh">make tools
+build/tools/tfdb_inspect STORE
+build/tools/tfdb_verify STORE
+build/tools/tfdb_dump STORE --framed-v1 --from BEGIN_NS --to END_NS \
+    --selector SELECTOR
+</code></pre>
+<p><code>tfdb_verify</code> reports gaps and validates reachable blocks. It does not prove
+the underlying flash controller's power-loss behavior. Run the qualification
+matrix in <a href="testing.html"><code>testing.md</code></a> on every target storage/controller/firmware
+combination.</p>
+<h2 id="production-integration-checklist">Production integration checklist</h2>
+<ul>
+<li>Provisioning and normal startup are separate code paths.</li>
+<li>Every <code>Status</code>, including <code>checkpoint()</code>, <code>stop()</code>, and <code>close()</code>, is checked.</li>
+<li>One writer owns the writable backend; reader behavior during overwrite is
+explicitly handled.</li>
+<li>The index timestamp comes from a defined application clock; the source clock
+remains in the payload when needed.</li>
+<li>Record format, selector layout, time-domain IDs, and flag meanings are
+versioned project contracts.</li>
+<li>Checked append/submit is used for nonzero record profiles.</li>
+<li>Queue bounds and the <code>busy</code> policy are deliberate and load-tested.</li>
+<li>The checkpoint interval plus worst queue/flush latency meets the power-loss
+budget.</li>
+<li>Geometry and compression are validated against retention, RAM, and flash
+endurance requirements.</li>
+<li>Shutdown drains the async writer before closing the store.</li>
+<li>Gaps, time anomalies, sync errors, backpressure, and durability age feed
+operational telemetry.</li>
+<li>Physical power-cut and long-duration target-media tests pass before release.</li>
+</ul>
+<h2 id="common-mistakes">Common mistakes</h2>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Mistake</th>
+<th scope="col">Consequence</th>
+<th scope="col">Correct action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>formatting on every boot</td>
+<td>destroys the retained ring</td>
+<td>format only during explicit provisioning/reinitialization</td>
+</tr>
+<tr>
+<td>relying on <code>RingStore</code> destruction</td>
+<td>RAM tail may be lost and errors disappear</td>
+<td>explicitly check <code>close()</code></td>
+</tr>
+<tr>
+<td>treating <code>publish()</code> as durable</td>
+<td>a power cut may lose published blocks</td>
+<td>use and check <code>checkpoint()</code></td>
+</tr>
+<tr>
+<td>using source-device time as the only index</td>
+<td>1970-era or bad clock values make extraction unreliable</td>
+<td>index by storage-service arrival time; retain source time in payload</td>
+</tr>
+<tr>
+<td>assuming query timestamps are sorted</td>
+<td>mixed sources produce out-of-order output</td>
+<td>consume physical order or sort after extraction</td>
+</tr>
+<tr>
+<td>retaining callback views</td>
+<td>use-after-lifetime bugs</td>
+<td>copy bytes inside the callback</td>
+</tr>
+<tr>
+<td>retrying <code>busy</code> in a tight loop</td>
+<td>CPU burn and unbounded latency</td>
+<td>apply bounded retry/backpressure/drop policy outside TFDB</td>
+</tr>
+<tr>
+<td>changing profile without rotation discipline</td>
+<td>queued records can enter the wrong contract</td>
+<td>use checked submit and rotate at a controlled boundary</td>
+</tr>
+<tr>
+<td>ignoring gap events</td>
+<td>incomplete exports look complete</td>
+<td>surface and count overwritten/corrupt gaps</td>
+</tr>
+<tr>
+<td>using deterministic IDs in production</td>
+<td>weakens incarnation identity</td>
+<td>leave explicit test-ID fields zero</td>
+</tr>
+</tbody>
+</table></div>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">887af197191656416b8c67394a9eb219a1b180cf35f18e2e9b84dca5605519e2</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

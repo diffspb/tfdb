@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="23cad4d496499a6ff376dbd8949e076913fc1284b7883ce671fbd61ea22baee3">
+  <title>TFDB architecture — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="architecture.html" aria-current="page">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../architecture.md">docs/architecture.md</a>. The Markdown file is canonical.</p>
+      <h1 id="tfdb-architecture">TFDB architecture</h1>
+<h2 id="1-goals-and-boundaries">1. Goals and boundaries</h2>
+<p>TFDB stores a high-rate sequence of small telemetry messages or application log
+records for years on eMMC/NAND-backed Linux systems. It is optimized for:</p>
+<ul>
+<li>sequential host writes and bounded metadata amplification;</li>
+<li>configurable loss of only the uncheckpointed tail after power failure;</li>
+<li>deterministic rotation inside a fixed-size file or block device;</li>
+<li>time-range block lookup with project-specific record filtering above it;</li>
+<li>bounded recovery work and bounded index RAM;</li>
+<li>a format implementable independently in C++14 and Rust;</li>
+<li>explicit diagnostics instead of silent repair or silent data substitution.</li>
+</ul>
+<p>It is not a relational database, a filesystem, a globally time-sorted store, a
+bad-block manager, or a distributed replication protocol. The Linux block
+stack/controller is responsible for raw NAND management and wear levelling.</p>
+<h2 id="2-layering">2. Layering</h2>
+<pre><code class="language-text">application telemetry/log schema and parser
+             | whole encoded record + index timestamp
+             v
+optional record codec/query adapter (split, identify, display, filter)
+             |
+             v
+record block builder (whole-record packing, time statistics, anomaly flags)
+             |
+             v
+block pipeline (compression, CRC, serialized block)
+             |
+             v
+ring volume (partition generations, index/footer, recovery, rotation)
+             |
+             v
+Storage backend (positional read/write/flush/size)
+             |
+             v
+regular fixed-size file or Linux block device
+</code></pre>
+<p>This resolves the apparent circular dependency between block storage and
+message parsing:</p>
+<ul>
+<li>the core sees the boundary of a record because each <code>append()</code> supplies one
+complete byte span, but it never interprets those bytes;</li>
+<li>the builder owns assembling records into a block and guarantees no record is
+split;</li>
+<li>the persistent block header carries only aggregate metadata required for
+recovery and time lookup;</li>
+<li>a record codec is needed only when a caller wants individual records rather
+than candidate blocks.</li>
+</ul>
+<p>The lower block query remains useful even when an old project parser is no
+longer installed: bytes can still be verified, copied, and preserved.</p>
+<p><code>RingStore::append()</code> is the trusted low-level seam: it cannot prove that
+opaque bytes match the declared record profile. Profile-bound helpers such as
+<code>append_framed_record()</code> check the active partition ID/version before writing.
+Projects should expose typed helpers to normal application code and reserve raw
+append for already validated native frames.</p>
+<h2 id="3-volume-and-partition-lifecycle">3. Volume and partition lifecycle</h2>
+<p>A volume has two CRC-protected static header copies followed by equal-sized
+partitions. Static headers describe geometry and format version; they are not
+updated on normal writes.</p>
+<p>Each partition has:</p>
+<ol>
+<li>a CRC-protected header written once when its generation begins;</li>
+<li>variable-length block frames appended from the data start;</li>
+<li>a fixed reserved tail region for time-index entries;</li>
+<li>a footer slot written once after the index when the partition seals.</li>
+</ol>
+<p>The logical lifecycle is <code>stale -&gt; active -&gt; sealed -&gt; stale</code>. State is inferred
+from validated artifacts rather than toggled in place:</p>
+<ul>
+<li>a matching header without a matching valid footer is active or interrupted;</li>
+<li>a matching header, index, and footer is sealed;</li>
+<li>blocks/footer with another generation are stale and ignored.</li>
+</ul>
+<p>Only one partition is active. Its generation is greater than all retained
+generations. A 64-bit generation cannot wrap within the product lifetime; a
+wrap is treated as an unsupported/corrupt volume instead of adding subtle
+modular ordering.</p>
+<p>When the active data area or index capacity cannot accept another block:</p>
+<ol>
+<li>flush any dirty data blocks before publishing a seal;</li>
+<li>write the index into the reserved tail;</li>
+<li>write the footer that describes the index;</li>
+<li><code>fdatasync()</code> the sealed partition state;</li>
+<li>write the next physical partition header with generation + 1;</li>
+<li><code>fdatasync()</code> the new header before accepting its data.</li>
+</ol>
+<p>A crash anywhere leaves either a recoverable active valid prefix, a sealed old
+partition, or a validated new active header. No pointer update is required.</p>
+<h2 id="4-blocks-and-compression">4. Blocks and compression</h2>
+<p>The builder holds at most one configured uncompressed block. <code>append()</code> either
+adds the whole record or first emits the existing block. A record larger than
+the block payload limit is rejected explicitly.</p>
+<p>On emission, the compression codec runs once. Compressed representation is used
+only if header plus compressed payload is smaller than the uncompressed form.
+Encoded blocks have variable lengths. Frame starts are rounded up to a
+configurable persistence quantum, so compression improves host bytes written
+and can improve retention in quantum-sized steps. The gap is deliberately left
+unwritten. No record is re-compressed after every append and no record crosses
+a block boundary.</p>
+<p>Each block header includes generation, sequence, encoded/raw lengths, record
+count, min/max application time, flags, codec identity, and CRCs. A recovery
+scan accepts the longest sequence of blocks with matching generation,
+monotonic block sequence, bounded lengths, valid header, and valid payload.</p>
+<p>Adjacent blocks also form a writer-incarnation chain. Every writable open gets
+a random 128-bit ID; a block names both its current writer and the preceding
+block's writer. After recovery a replacement block therefore breaks any stale
+same-generation suffix beyond the torn point. This preserves the useful ability
+to continue a large working partition across ordinary vehicle restarts; the
+simpler alternative—seal and advance one whole partition on every open—was
+rejected because frequent short trips could collapse retention.</p>
+<p>CRC32C is mandatory in v1. It is not a claim that data is cryptographically
+authentic; it is inexpensive evidence against torn writes, stale fragments,
+and accidental corruption. A one-call <code>write()</code> is not assumed atomic.</p>
+<h2 id="5-indexing-and-time">5. Indexing and time</h2>
+<p>The application supplies an <code>int64</code> index timestamp with each record. TFDB does
+not call realtime clocks on behalf of the application and does not modify the
+value.</p>
+<p>Input order may be slightly mixed. For each block the index stores the minimum
+and maximum timestamp. A time query selects every block whose closed range
+intersects the requested interval and returns selected blocks in physical
+generation/block order. This can read false-positive records but cannot miss a
+record merely because neighboring timestamps were out of order.</p>
+<p><code>query_blocks()</code> therefore returns candidate block bytes, not an exact record
+answer. <code>query_records()</code> applies the single profile supplied by the caller,
+verifies the decoded record count, and filters record timestamps and selectors
+exactly. It returns <code>unsupported</code> when a candidate partition declares another
+profile pair; mixed-profile history requires block-level application dispatch.
+Neither API sorts by time.</p>
+<p>The 64-bit selector in <code>FramedRecordV1</code> is a project-assigned lookup key. A
+project may use the message ID when queries intentionally combine redundant
+senders, or pack <code>(message_id, source_address)</code> when the two half-sets must be
+distinguished. Schemas needing independent message and source predicates
+should define both fields in their native record profile; v1 has no mandatory
+secondary on-media index, so exact filtering happens after time-index block
+selection.</p>
+<p>A configurable delta threshold compares consecutive append timestamps. A
+large forward jump or excessive regression marks the block <code>time_anomaly</code> and
+increments diagnostics; the record remains stored and participates in min/max.
+The flag is block-level because the core does not own the record schema. A
+project codec may persist a per-record quality flag.</p>
+<p>The physical tuple <code>(partition_generation, block_sequence, record_position)</code> is
+the only clock-independent order. For systems that must reconstruct data
+written near 1970, the recommended project envelope stores:</p>
+<ul>
+<li>application realtime;</li>
+<li>monotonic time;</li>
+<li>boot/session identifier;</li>
+<li>time-quality/synchronization event flags.</li>
+</ul>
+<p>This mirrors a proven logging technique without charging every telemetry format
+for fields it may not require. Approximate wall-time repair is a parser/export
+operation and never mutates the original volume.</p>
+<h2 id="6-active-and-sealed-indexes">6. Active and sealed indexes</h2>
+<p>The writer builds the active partition index in RAM. Once a data block write
+completes, it is published in the in-process catalog. Records still in the
+builder's RAM block are deliberately invisible; exposing a few extra records
+would require more synchronization for no durability benefit.</p>
+<p>At seal, index entries are serialized to the reserved tail. If its fixed
+capacity fills first, the partition seals early. Wasting remaining data bytes is
+preferred to an overflow format or a second index structure.</p>
+<p>Each query loads at most one sealed partition index at a time, then releases it
+before moving to the next partition. Its size is bounded by the configured
+fixed index reserve; concurrent readers multiply that bound. The writer holds
+only the active index. A corrupt or absent index can be rebuilt by scanning data
+blocks. The index is acceleration data, never the sole record of data
+existence. Paging one very large partition index is a compatible future RAM
+optimization, not an on-media change.</p>
+<h2 id="7-durability-contract">7. Durability contract</h2>
+<p>There are three distinct events:</p>
+<ul>
+<li><strong>accepted</strong>: bytes were copied into the builder or async queue;</li>
+<li><strong>published</strong>: a complete CRC-protected block was written through the backend;</li>
+<li><strong>durable</strong>: the block was followed by a successful backend <code>flush</code>
+(<code>fdatasync()</code> for POSIX storage).</li>
+</ul>
+<p>Only a durability checkpoint establishes the last guarantee. A checkpoint
+emits a partial RAM block first, then flushes. Consequently, a background writer
+that checkpoints at most every <code>T</code> seconds can bound durable-tail age only when
+its queue drains at the qualified peak rate. The measured bound is checkpoint
+schedule delay + queue residence + block publication + device completion. The
+exact deployment claim must include worst-case measurements and the storage
+controller's flush correctness.</p>
+<p>The synchronous API exposes <code>checkpoint()</code> and <code>emergency_checkpoint()</code>; the
+application must schedule them. The asynchronous wrapper owns a bounded queue,
+single writer thread, periodic deadline, explicit barrier, and backpressure.
+Its <code>submit_checked()</code> stores the expected record-profile/time-domain contract
+with each queued record and revalidates it in the writer thread after any
+automatic rotation. No background <code>sync_file_range()</code> is presented as
+durability.</p>
+<p>By default the async deadline and age metrics share <code>steady_clock</code>. Tests may
+inject another monotonic nanosecond clock and wake the condition variable with
+<code>notify_clock_advanced()</code>; this is a scheduling test seam, not persisted state
+or an application-time source. Using one clock for both deadline and metrics
+allows exact <code>interval + backend stall</code> assertions without sleeps. A custom
+callback must be nonblocking, non-throwing, monotonic, and non-reentrant; any
+clock-side mutex is released before notifying the writer. Timer expiration is
+computed as <code>now &gt;= start &amp;&amp; now - start &gt;= interval</code>, so a clock at
+<code>UINT64_MAX</code> cannot create a saturated-deadline checkpoint loop. Default-clock
+waits for very long intervals are split into one-hour chunks, avoiding overflow
+inside implementations that calculate <code>steady_clock::now() + wait_for</code>. Queue
+residence ends when an item is dequeued and therefore excludes block
+publication and backend latency.</p>
+<p>If a flush fails, the writer enters an error state and rejects further claims of
+durability until reopened/recovered. Callers receive the original I/O error.</p>
+<h2 id="8-recovery">8. Recovery</h2>
+<p>Open performs bounded work:</p>
+<ol>
+<li>choose a valid matching volume header copy;</li>
+<li>read every small partition header/footer;</li>
+<li>order retained partitions by generation;</li>
+<li>validate sealed indexes lazily or, in strict mode, validate every indexed
+block and payload eagerly;</li>
+<li>scan every current-volume partition lacking a valid footer to find its valid
+block prefix.</li>
+</ol>
+<p>A normal single-crash transition leaves at most one unsealed partition. More
+than one scan is possible after independent footer damage and is preferable to
+silently dropping recoverable data.</p>
+<p>An interrupted new header with no valid current-volume footer/block evidence is
+ignored; the previous sealed generation remains authoritative and the next
+partition can be started again. If a damaged header still has valid evidence
+that the slot belonged to the current volume, lazy read-only open reports a
+gap, strict open rejects it, and writable open refuses the ambiguous generation
+order. An explicit salvage/reformat decision is required before overwriting
+such a slot. If the active tail contains an invalid block, normal recovery
+stops before it and may overwrite from that offset. It never searches past an
+invalid tail for blocks that happen to look valid.</p>
+<p>Interior corruption in an older sealed partition is reported. Normal reads can
+either stop or report a gap according to query policy. A separate salvage tool
+may scan for later block magic/generation/sequence candidates, but salvaged data
+is labelled and never silently folded into normal results.</p>
+<p>Default open validates structural metadata and defers sealed payload reads;
+this minimizes startup I/O. Strict open verifies sealed indexes and every block
+payload before success and rejects damaged current-volume headers. These are
+integrity service levels, not different media formats.</p>
+<h2 id="9-rotation-and-concurrent-readers">9. Rotation and concurrent readers</h2>
+<p>One writer is allowed. Feeding it from multiple producers is outside the
+library; this makes append order explicit and avoids hidden queues in the core.
+Multiple in-process readers take immutable catalog snapshots and use positional
+reads.</p>
+<p>Readers do not pin partitions. A reader validates the generation after index
+acquisition/rebuild, before each block, and after reading its payload. An
+apparent header, metadata, or CRC failure triggers one more generation check:
+slot reuse is reported as an <code>overwritten</code> gap, while damage in an unchanged
+generation is reported as <code>corrupt</code>. The query continues or stops according to
+policy and never returns a silent mixture of generations.</p>
+<p>The POSIX backend takes a nonblocking advisory exclusive lock for a writer;
+read-only file descriptors remain allowed. Other processes may open the file/device read-only. They receive the same
+generation validation but no stable snapshot or lease. This is deliberate:
+sequential storage is inspectable while live, but a slow external reader cannot
+block data collection.</p>
+<h2 id="10-extensibility-and-compatibility">10. Extensibility and compatibility</h2>
+<p>All integers are explicitly encoded little-endian; C++ object layout is never
+written directly. Every persistent structure has a magic, size, major/minor
+version, reserved-zero bytes, bounds checks, and CRC.</p>
+<p>The partition header contains a bounded feature directory. Each feature has a
+kind, algorithm ID, version, required/optional flag, configuration slice, and
+optional reserved media region. Unknown required features make the partition
+unreadable. Unknown optional features may be skipped when the requested
+operation does not depend on them.</p>
+<p>Format changes follow these rules:</p>
+<ul>
+<li>the v1.0 reader requires exact v1.0 encoded sizes and rejects a newer minor;</li>
+<li>a future minor may add skippable information only after that minor defines
+exact size, CRC coverage, and compatibility behavior;</li>
+<li>semantic/incompatible changes require a new major;</li>
+<li>algorithm IDs are never reused;</li>
+<li>partition-local configuration allows new writes to change settings without
+migrating old partitions.</li>
+</ul>
+<p>Golden byte vectors and corruption vectors are normative alongside the written
+specification. The future Rust implementation must read C++ vectors and vice
+versa.</p>
+<p>The implemented extension seams are partition-local compression registries and
+record profiles. The feature directory reserves a path for future index
+plugins. A value index would receive block summaries from a project parser,
+own a declared tail region, and remain rebuildable from records. It must not be
+added as an unbounded callback inside the current writer: its maximum bytes,
+recovery behavior, compatibility ID, and query false-positive rules need a
+separate ADR and golden vectors first.</p>
+<h2 id="11-logs">11. Logs</h2>
+<p>Application logs fit the block layer without special storage behavior. A log
+codec should encode length, realtime, monotonic time, session/boot ID, severity,
+component/channel, text/structured payload, and quality flags. <code>component</code> is
+the natural message identifier for filtering; severity can later receive an
+optional secondary index without altering the ring format.</p>
+<p>Logs and telemetry may share a volume only when retention, privacy, and load
+policies match. Separate partitions per type are not supported inside one ring;
+separate volumes are simpler when log bursts must not evict safety telemetry.</p>
+<p>Text logs often compress well with dictionary/match codecs such as LZ4 or Zstd,
+but the v1 PackBits baseline only helps adjacent equal-byte runs and reduced
+the reference log workload by only about 2%. Logs can also contain already-
+compressed blobs or secrets. Compression is partition-local and optional.
+Encryption and tamper authentication are intentionally outside format v1; CRC
+is not a security mechanism.</p>
+<p>The implemented <code>FramedRecordV1</code> is a practical envelope for text logs. A
+dual-clock common log profile is intentionally deferred and analyzed in
+<a href="logs.html"><code>logs.md</code></a>.</p>
+<h2 id="12-resource-bounds">12. Resource bounds</h2>
+<ul>
+<li>writer RAM: one raw block, up to one compressed candidate, one contiguous
+frame, the active index, and the optional async queue;</li>
+<li>reader RAM: one serialized index buffer plus its decoded entries, one encoded
+block, one decoded block, and at most one retained footerless index copied
+from the catalog; older footerless partitions are rescanned lazily;</li>
+<li>open-recovery transient RAM: at most two decoded footerless indexes while a
+newly scanned generation replaces the previous candidate, independent of
+partition count;</li>
+<li>recovery I/O: all partition headers/footers plus at most one active data
+region in the normal case;</li>
+<li>steady metadata writes: one data block write per emitted block and one index
+plus footer at seal. Rotation of already-checkpointed data has two flushes
+(seal, new header); dirty rotation first checkpoints data and therefore has
+three. Periodic checkpoints add their configured flushes;</li>
+<li>low-level synchronous append copies into pre-reserved block storage without a
+per-record allocation; convenience profile helpers may allocate an envelope.</li>
+</ul>
+<p>Exact bounds and write amplification are produced by the test/benchmark suite,
+not asserted only from inspection.</p>
+<h2 id="13-file-and-block-device-i-o">13. File and block-device I/O</h2>
+<p>Both backends use fixed-offset <code>pread</code>/<code>pwrite</code> and <code>fdatasync</code>; neither relies
+on a mutable file position. A regular file is preallocated and its parent
+directory is synchronized when created. A block device is never resized or
+formatted by filesystem operations.</p>
+<p>The first implementation deliberately uses buffered I/O. <code>O_DIRECT</code> imposes
+filesystem/device/version-specific buffer, length, and offset alignment and is
+not itself a durability guarantee. The on-media persistence quantum therefore
+does not force an application buffer alignment. A future direct-I/O backend can
+be added behind <code>Storage</code> after it queries and satisfies platform alignment,
+without changing the format.</p>
+<p>The regular-file and raw-device code paths share the same logical recovery
+rules, but they do not have identical physical amplification. A filesystem can
+add allocation and journal traffic; a raw device exposes more provisioning
+risk. Both require power-cut qualification of the complete kernel, driver,
+controller, cache, and flash stack.</p>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">23cad4d496499a6ff376dbd8949e076913fc1284b7883ce671fbd61ea22baee3</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

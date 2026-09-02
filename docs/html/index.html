@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="9ccf291b3292f564d189a849b365ab13314abd4b335363cdf6a07abcf7c57ae2">
+  <title>TFDB — Telemetry Flash DB — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html" aria-current="page">Overview</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../../README.md">README.md</a>. The Markdown file is canonical.</p>
+      <h1 id="tfdb-telemetry-flash-db">TFDB — Telemetry Flash DB</h1>
+<p>Current release: <strong>1.0.0</strong> (canonical value: <a href="../../VERSION"><code>VERSION</code></a>).</p>
+<p>TFDB (Telemetry Flash DB) is a small C++14 library for long-lived,
+flash-conscious telemetry and log storage on Linux. A store is a fixed-size
+file or block device split into a ring of independently recoverable partitions.
+Data is appended in bounded blocks, old partitions are rotated in place, and
+reads use compact per-block time indexes.</p>
+<p>The project is intentionally dependency-free at runtime. It includes:</p>
+<ul>
+<li>a synchronous block/record writer and reader;</li>
+<li>a background asynchronous writer wrapper;</li>
+<li>a POSIX file/block-device backend and a deterministic in-memory fault backend;</li>
+<li>inspection, verification, extraction, and load-generation tools;</li>
+<li>unit, recovery, integration, and workload tests;</li>
+<li>a versioned on-media format specification intended for an independent Rust
+implementation.</li>
+</ul>
+<h2 id="build-and-verify">Build and verify</h2>
+<p>The only runtime requirement is Linux with a C++14 standard library. The
+default build uses <code>make</code> and produces a static library.</p>
+<pre><code class="language-sh">make
+make check
+make sanitize
+make coverage
+make benchmark
+</code></pre>
+<p>Public headers are under <code>include/tfdb/</code>. The core writer is synchronous and
+single-writer; <code>AsyncWriter</code> is an optional bounded-queue wrapper. Both layers
+offer checked append/submit operations that carry the expected record profile
+and time domain across automatic rotation. Multiple readers may query candidate
+blocks or use a record profile for exact time and selector filtering.</p>
+<p>The tools are:</p>
+<ul>
+<li><code>tfdb_format</code>: create/format a fixed regular file or format an opened device;</li>
+<li><code>tfdb_inspect</code>: print geometry, generations, options, and time bounds;</li>
+<li><code>tfdb_verify</code>: validate every currently reachable block and report gaps;</li>
+<li><code>tfdb_dump</code>: stream candidate blocks or decoded FramedRecordV1 records;</li>
+<li><code>tfdb_loadgen</code>: generate deterministic telemetry/log profiles, inject bounded
+short backend writes, verify exact retention, and report metrics.</li>
+</ul>
+<h2 id="design-documents">Design documents</h2>
+<p>A committed offline HTML mirror is stored under <code>docs/html/</code>; open
+<code>docs/html/index.html</code> directly in a browser. Regenerate it with
+<code>python3 docs/build_html.py</code> and verify that it matches the canonical Markdown
+with <code>python3 docs/build_html.py --check</code>. Regeneration requires
+exactly <code>markdown-it-py 3.0.0</code>; the generated pages have no runtime or network
+dependency.</p>
+<ul>
+<li><a href="architecture.html"><code>docs/architecture.md</code></a>: layers, lifecycle, durability,
+recovery, concurrency, and extension seams;</li>
+<li><a href="tutorial.html"><code>docs/tutorial.md</code></a>: runnable programmer onboarding from
+provisioning through queries, async ingestion, logs, and deployment;</li>
+<li><a href="api.html"><code>docs/api.md</code></a>: complete public C++14 API contracts, ownership,
+errors, metrics, and extension interfaces;</li>
+<li><a href="format-v1.html"><code>docs/format-v1.md</code></a>: exact candidate wire format and
+compatibility rules;</li>
+<li><a href="decisions.html"><code>docs/decisions.md</code></a>: alternatives and their effects;</li>
+<li><a href="research.html"><code>docs/research.md</code></a>: surveyed systems and borrowed ideas;</li>
+<li><a href="testing.html"><code>docs/testing.md</code></a>: acceptance and hardware qualification;</li>
+<li><a href="sizing.html"><code>docs/sizing.md</code></a>: retention, loss, RAM, and eight-year
+endurance formulas;</li>
+<li><a href="evidence.html"><code>docs/evidence.md</code></a>: current tests, coverage, exact I/O,
+and reference workload measurements;</li>
+<li><a href="logs.html"><code>docs/logs.md</code></a>: application-log profiles, clock repair, and
+retention/security tradeoffs.</li>
+</ul>
+<p>Runnable, status-checked consumer examples are under <code>examples/</code>:</p>
+<pre><code class="language-sh">make -C examples check
+</code></pre>
+<p>See <a href="../../examples/quickstart.cpp"><code>examples/quickstart.cpp</code></a> for the synchronous
+lifecycle and <a href="../../examples/async_writer.cpp"><code>examples/async_writer.cpp</code></a> for
+bounded background ingestion. Production code must check every returned
+<code>Status</code>. Destruction alone does not make a RAM tail durable.</p>
+<h2 id="ai-agent-integration-skill">AI-agent integration skill</h2>
+<p>The repository ships a reusable skill at
+<a href="../../skills/tfdb-integration/SKILL.md"><code>skills/tfdb-integration/SKILL.md</code></a>. Invoke
+it as <code>$tfdb-integration</code> in compatible coding agents when embedding TFDB or
+reviewing an integration. It directs the agent to the current public headers,
+safe provisioning, checked profile/time contracts, durability barriers,
+backpressure and gap handling, and target-hardware qualification boundaries.</p>
+<h2 id="status">Status</h2>
+<p>The C++14 candidate is implemented and its current evidence is reproducible,
+but format v1 is not frozen. It remains a candidate until an independent Rust
+reader passes the golden/corruption vectors and target hardware passes physical
+power-cut and eight-year endurance qualification.</p>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">9ccf291b3292f564d189a849b365ab13314abd4b335363cdf6a07abcf7c57ae2</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

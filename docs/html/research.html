@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="eee361e35d2e3bacf28a8350997843d3f8a4b5066b4718674b0e45b58a708e35">
+  <title>Research notes and borrowed ideas — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html" aria-current="page">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../research.md">docs/research.md</a>. The Markdown file is canonical.</p>
+      <h1 id="research-notes-and-borrowed-ideas">Research notes and borrowed ideas</h1>
+<p>This document records the external designs considered for TFDB. They are
+references, not dependencies. TFDB remains a purpose-built circular store
+because none of the reviewed formats combines fixed media size, deterministic
+rotation, low metadata write amplification, bounded recovery, and opaque
+project records.</p>
+<h2 id="mcap">MCAP</h2>
+<p>MCAP is the closest record/chunk reference. Its chunks carry earliest/latest
+log time, uncompressed size, compression identity, and optional CRC. Message
+Index records follow their Chunk in the Data section; the Summary contains
+Chunk Index records that point to them. Records are length framed and future
+record types are designed to be skipped.</p>
+<p>Ideas retained:</p>
+<ul>
+<li>independently decompressible chunks;</li>
+<li>explicit stored and uncompressed lengths;</li>
+<li>per-chunk min/max time rather than assuming message order;</li>
+<li>codec identifiers and versions in persistent metadata;</li>
+<li>checksums around independently recoverable units;</li>
+<li>a compact summary/index separated from bulk data.</li>
+</ul>
+<p>Not retained: MCAP is a growing archival file finalized with a footer. It does
+not define fixed-size circular reuse, partition generations, durability
+checkpoints, or behavior when a reader races an overwrite.</p>
+<p>Source: <a href="https://mcap.dev/spec" rel="noopener noreferrer">MCAP format specification</a>.</p>
+<h2 id="systemd-journal">systemd journal</h2>
+<p>The journal file format stores an entry sequence number together with
+realtime and monotonic timestamps; monotonic time is associated with a boot
+identifier. This is the important lesson for machines that can begin near the
+Unix epoch and synchronize later: a wall clock alone cannot reconstruct a
+timeline.</p>
+<p>TFDB keeps physical generation/block/record order authoritative. The core time
+index uses the application-provided index timestamp and never rewrites it.
+Applications that require post-facto clock reconstruction should include a
+monotonic timestamp and boot/session identifier in their record codec. Making
+those fields mandatory in the block layer would impose substantial overhead
+on the very small telemetry records that dominate the target workload.</p>
+<p>Source: <a href="https://systemd.io/JOURNAL_FILE_FORMAT/" rel="noopener noreferrer">systemd Journal File Format</a>.</p>
+<h2 id="sqlite-atomic-commit">SQLite atomic commit</h2>
+<p>SQLite deliberately does not assume sector writes are atomic and uses sync
+points and redundant state to distinguish old, new, and incomplete updates.
+That invalidates the tempting assumption that one 8--32 KiB <code>write()</code> is an
+atomic block commit.</p>
+<p>Ideas retained:</p>
+<ul>
+<li>never require atomic multi-sector writes;</li>
+<li>validate every newly appended structural unit;</li>
+<li>order sync points around state transitions;</li>
+<li>recover from either the old generation or a completely validated new one.</li>
+</ul>
+<p>TFDB does not use a rollback journal because data is immutable after append and
+old ring generations are disposable. A valid prefix is identified by the full
+set of block invariants: CRCs and bounds, volume/partition generation,
+contiguous sequence, and the per-writer incarnation chain. The chain is what
+prevents a CRC-valid stale same-generation suffix from reappearing after a
+second crash.</p>
+<p>Source: <a href="https://sqlite.org/atomiccommit.html" rel="noopener noreferrer">Atomic Commit in SQLite</a>.</p>
+<h2 id="littlefs">littlefs</h2>
+<p>littlefs combines append-style metadata, revision counts, redundancy, CRCs,
+copy-on-write, bounded memory, bad-block handling, and dynamic wear leveling
+for raw microcontroller flash. Its filesystem tree and erase/program management
+solve a much broader and lower-level problem.</p>
+<p>Ideas retained:</p>
+<ul>
+<li>generation/revision selects the newest complete instance;</li>
+<li>CRC is the inexpensive evidence that an append completed;</li>
+<li>bounded recovery and RAM are design constraints, not later optimizations;</li>
+<li>frequently rewritten global metadata is avoided.</li>
+</ul>
+<p>Not retained: metadata pairs, allocation trees, and raw erase/program handling
+belong below TFDB when Linux exposes eMMC/NAND through a controller/FTL. This
+does not mean littlefs is an FTL; it owns those concerns because it directly
+targets raw flash.</p>
+<p>Sources: <a href="https://github.com/littlefs-project/littlefs/blob/master/DESIGN.md" rel="noopener noreferrer">littlefs design</a>
+and <a href="https://github.com/littlefs-project/littlefs/blob/master/SPEC.md" rel="noopener noreferrer">on-disk specification</a>.</p>
+<h2 id="rocksdb-wal">RocksDB WAL</h2>
+<p>RocksDB separates normal tail recovery, strict consistency, point-in-time
+recovery, and best-effort salvage. Its WAL records and data blocks use
+checksums, while flush policy controls the durability/throughput trade-off.</p>
+<p>Ideas retained:</p>
+<ul>
+<li>tail corruption and interior corruption have different meaning;</li>
+<li>normal open stops at the first invalid active-tail block;</li>
+<li>verification and salvage are explicit tool modes rather than silent normal
+behavior;</li>
+<li>the durability contract names which call makes data durable.</li>
+</ul>
+<p>Not retained: WAL plus memtable/SST compaction duplicates data and creates much
+more write amplification than an append-only telemetry ring needs.</p>
+<p>Sources: <a href="https://github.com/facebook/rocksdb/wiki/WAL-Recovery-Modes" rel="noopener noreferrer">RocksDB WAL recovery modes</a>
+and <a href="https://github.com/facebook/rocksdb/wiki/Basic-Operations#checksums" rel="noopener noreferrer">checksum behavior</a>.</p>
+<h2 id="zephyr-fcb-and-nvs">Zephyr FCB and NVS</h2>
+<p>Zephyr's Flash Circular Buffer is the closest small raw-flash analogue. It
+stores FIFO entries containing a length, data, and checksum; an append is
+finished by writing its checksum, and rotation erases the oldest flash sector.
+Zephyr NVS is also circular, but it preserves the newest value per 16-bit key
+and copies live values during sector reuse.</p>
+<p>Ideas retained:</p>
+<ul>
+<li>circular FIFO reuse at a coarse erase/partition unit;</li>
+<li>a checksum marks a complete append;</li>
+<li>whole oldest units are abandoned to make progress;</li>
+<li>endurance must be calculated from write rate, record overhead, capacity, and
+conservative erase-cycle assumptions.</li>
+</ul>
+<p>Not retained: TFDB runs above Linux files/block devices and therefore does not
+erase raw sectors. NVS's latest-value semantics and copying are wrong for a
+telemetry history, while FCB lacks compressed block indexing, Linux flush
+semantics, and reader/generation race rules.</p>
+<p>Sources: <a href="https://docs.zephyrproject.org/latest/services/storage/fcb/fcb.html" rel="noopener noreferrer">Zephyr FCB</a>
+and <a href="https://docs.zephyrproject.org/latest/services/storage/nvs/nvs.html" rel="noopener noreferrer">Zephyr NVS</a>.</p>
+<h2 id="common-trace-format-lttng-and-rosbag2">Common Trace Format, LTTng, and rosbag2</h2>
+<p>CTF demonstrates the value and cost of keeping schemas separate from binary
+event streams. rosbag2's explicit serialization and storage plugin layers,
+with both MCAP and SQLite storage, likewise show that a schema layer and a
+storage layer should not be conflated.</p>
+<p>CTF packet headers/context make independently usable packets and time bounds
+explicit. LTTng overwrite mode uses fixed sub-buffers and sequence numbers so a
+reader can report loss in flight-recorder operation. These validate TFDB's
+coarse block/partition boundaries and explicit gap events.</p>
+<p>TFDB therefore stores an opaque <code>record_format_id</code> and version in each
+partition. The core can return blocks without knowing a project schema. A
+parser/debug tool may register the matching record codec to split, filter, and
+display records.</p>
+<p>Sources: <a href="https://diamon.org/ctf/" rel="noopener noreferrer">Common Trace Format</a>,
+<a href="https://lttng.org/docs/v2.16/" rel="noopener noreferrer">LTTng overwrite mode</a>, and
+<a href="https://github.com/ros2/rosbag2/blob/rolling/README.md#storage-format-plugin-architecture" rel="noopener noreferrer">rosbag2 storage plugin architecture</a>.</p>
+<h2 id="linux-durability-interface">Linux durability interface</h2>
+<p>Linux and storage devices may buffer and reorder writes. <code>fdatasync()</code> waits
+for file data and required metadata, while device write-back caches require
+working flush support in the driver/controller path. <code>sync_file_range()</code> is
+not a durability primitive and does not flush volatile device caches.</p>
+<p>TFDB uses <code>fdatasync()</code> for checkpoints and exposes errors. A successful call
+is the software boundary of its guarantee; hardware that acknowledges a flush
+before non-volatile persistence cannot be repaired by an on-media format.</p>
+<p>The first backend remains buffered. Linux documents that <code>O_DIRECT</code> alignment
+depends on filesystem, kernel, and device, and that <code>O_DIRECT</code> alone is not a
+durability guarantee. Requiring it would complicate the simple file/block API
+without removing the need for a flush. The logical persistence quantum instead
+separates frame starts and can be tuned independently.</p>
+<p>For regular files, filesystem allocation and journaling add physical writes
+that are absent from host <code>pwrite</code> counters; ext4's default mode protects
+metadata ordering but does not turn application data writes into atomic
+transactions. Raw block devices avoid filesystem metadata but increase
+provisioning risk. The same media format is used, while endurance and power-cut
+results are qualified separately.</p>
+<p>Sources: <a href="https://man7.org/linux/man-pages/man2/fdatasync.2.html" rel="noopener noreferrer">fsync/fdatasync manual</a>,
+<a href="https://kernel.org/doc/html/latest/block/writeback_cache_control.html" rel="noopener noreferrer">Linux block write-back cache control</a>,
+<a href="https://man7.org/linux/man-pages/man2/open.2.html" rel="noopener noreferrer">O_DIRECT rules</a>,
+<a href="https://www.kernel.org/doc/html/latest/filesystems/ext4/journal.html" rel="noopener noreferrer">ext4 journal design</a>,
+and <a href="https://man7.org/linux/man-pages/man2/sync_file_range.2.html" rel="noopener noreferrer">sync_file_range warning</a>.</p>
+<h2 id="compression">Compression</h2>
+<p>Independent block compression is compatible with random access and bounded
+memory. A standard codec is preferable to inventing a complex format. LZ4's
+block format is byte-oriented, independently specified, and fast, but it does
+not carry its own compressed or decompressed sizes. TFDB would have to bound
+both from its block header and output buffer; even a small correct encoder is
+non-trivial code.</p>
+<p>Format v1 therefore makes compression a versioned block codec. <code>none</code> is
+mandatory. The initial dependency-free implementation also supplies a simple
+PackBits-style byte-run codec; an LZ4 codec ID is reserved for a separately
+reviewed implementation. A writer stores compressed bytes only when they are
+smaller, so incompressible input is never expanded on media.</p>
+<p>PackBits is intentionally a baseline, not a claim of best compression. It is
+small enough to exhaustively test and useful for long repeated-byte runs such
+as zero-filled fields. Ordinary repeated text still contains too few adjacent
+equal bytes and, like mixed binary telemetry, may gain little. The immutable
+codec registry lets a project qualify another byte-specified codec without
+entangling the ring logic. A codec becomes part of the cross-language standard
+only with bounded decompression, malformed-input tests, and C++/Rust golden
+vectors.</p>
+<p>Source: <a href="https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md" rel="noopener noreferrer">LZ4 block format</a>.</p>
+<h2 id="synthesis">Synthesis</h2>
+<p>The common pattern across the mature systems is small immutable units with
+lengths, identities, generations/sequence numbers, checksums, and explicit
+commit boundaries. TFDB applies that pattern twice:</p>
+<ol>
+<li>data blocks are the independently validated append units;</li>
+<li>partition footer/index is the optional acceleration summary, rebuildable
+from data blocks.</li>
+</ol>
+<p>The ring adds one rule absent from archival formats: every read must revalidate
+the partition generation before exposing data, because an old physical offset
+can become valid data from a newer generation while the reader is running.</p>
+<h2 id="what-the-measurements-can-and-cannot-prove">What the measurements can and cannot prove</h2>
+<p>The exact backend mock proves host call counts, byte ranges, flush ordering,
+and recovery against the modeled torn/reordered persistence states. File
+benchmarks prove throughput and host-request amplification on their recorded
+machine. Neither reveals an eMMC controller's internal write amplification,
+erase count, cache honesty, ECC margin, or behavior at end of life. Those need
+vendor endurance data, device health telemetry where available, and repeated
+physical power cuts on the production hardware/software stack.</p>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">eee361e35d2e3bacf28a8350997843d3f8a4b5066b4718674b0e45b58a708e35</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

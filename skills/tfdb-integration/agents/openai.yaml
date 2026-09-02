@@ -1,0 +1,4 @@
+interface:
+  display_name: "TFDB Integration"
+  short_description: "Integrate TFDB safely into C++ applications"
+  default_prompt: "Use $tfdb-integration to integrate Telemetry Flash DB into this application with checked durability and query handling."

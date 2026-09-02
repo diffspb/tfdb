@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="932adfc3a4593ca4686cd808dcf9c4faf10e870612856f4547f08da44acf32c8">
+  <title>Verification and acceptance strategy — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html" aria-current="page">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../testing.md">docs/testing.md</a>. The Markdown file is canonical.</p>
+      <h1 id="verification-and-acceptance-strategy">Verification and acceptance strategy</h1>
+<p>Testing is part of the storage contract. The same backend abstraction used by
+the POSIX implementation is implemented by a deterministic memory model with a
+volatile image, durable image, operation counters, and programmable failures.
+Current reproducible results are recorded in <a href="evidence.html"><code>evidence.md</code></a>; this
+document also defines qualification work that must be repeated for each target
+project and hardware stack.</p>
+<h2 id="1-test-layers">1. Test layers</h2>
+<h3 id="unit-tests">Unit tests</h3>
+<ul>
+<li>explicit-endian integer codecs and overflow/bounds rejection;</li>
+<li>CRC known vectors and corruption detection;</li>
+<li>compression round trips, incompressible fallback, malformed input, and
+maximum expansion;</li>
+<li>volume/partition/block/index/footer serialization golden bytes;</li>
+<li>time-range intersection with ordered, disordered, repeated, negative, and
+extreme timestamps;</li>
+<li>whole-record block packing and oversize rejection;</li>
+<li>generation ordering and rotation selection;</li>
+<li>status/error propagation and diagnostic counters.</li>
+</ul>
+<h3 id="model-and-state-machine-tests">Model and state-machine tests</h3>
+<p>A small reference model stores accepted records by generation and physical
+order. The current deterministic crash model covers append, checkpoint, crash,
+and reopen; focused tests cover query, rotation, corruption, and
+partition-local configuration changes. Extending the randomized command model
+to combine all of those operations remains a pre-freeze qualification item.</p>
+<p>Properties include:</p>
+<ul>
+<li>every returned record was appended and not silently altered;</li>
+<li>physical order never reverses;</li>
+<li>normal time queries have no false-negative block for valid min/max metadata;</li>
+<li>every record in the durable retained-window baseline remains present exactly
+and in physical order unless a later successfully flushed rotation evicted
+its generation; a modeled crash may add only specifically materialized,
+whole CRC-valid frames after that baseline;</li>
+<li>reuse never exposes blocks from a stale generation as current;</li>
+<li>bounded structures reject overflow rather than wrapping arithmetic.</li>
+</ul>
+<h3 id="crash-fault-injection">Crash/fault injection</h3>
+<p>The memory backend records exact read/write/flush calls and bytes. A flush copies
+the volatile image to the durable image. Crash discards volatile state. Failure
+plans can:</p>
+<ul>
+<li>return <code>EINTR</code>, a zero-progress success, or a successful short read/write;</li>
+<li>return a selected hard error with no transferred bytes;</li>
+<li>fail a selected write or flush call;</li>
+<li>preserve arbitrary prefixes/subsets of writes since the last flush;</li>
+<li>materialize selected writes in controller-reordered order;</li>
+<li>flip bits in header, payload, index, footer, or stale region;</li>
+<li>simulate crash after every write boundary in append, seal, and rotation.</li>
+</ul>
+<p>For each scenario the expected open status, exact retained window, gap events,
+and subsequent writability are defined in advance and asserted. An
+<code>unrecoverable</code> result is acceptable only for a case whose authoritative
+volume/geometry metadata was explicitly destroyed; it is not an alternative
+oracle for ordinary tail faults. Sparse streams are mandatory: a record smaller
+than a block followed only by a checkpoint must become durable.</p>
+<h3 id="integration-tests">Integration tests</h3>
+<ul>
+<li>regular fixed-size files through real <code>pread/pwrite/fdatasync</code>;</li>
+<li>reopen after process termination at scripted failpoints;</li>
+<li>multiple readers while the writer rotates repeatedly;</li>
+<li>an external CLI reader racing rotation and reporting possible gaps;</li>
+<li>configuration changes taking effect only at a new partition;</li>
+<li>tool smoke tests for format, inspect, verify, dump, and load generation;</li>
+<li>optional loop-device/raw-device tests in privileged CI/hardware labs.</li>
+</ul>
+<h3 id="fuzz-sanitizer-tests">Fuzz/sanitizer tests</h3>
+<p>All decoders accept attacker-like/corrupt bytes and must fail without out-of-
+bounds access or unbounded allocation. CI profiles should run ASan+UBSan and a
+coverage-guided fuzzer over volume/partition/block/compression decoding. These
+tools are optional build-time dependencies, not runtime library dependencies.</p>
+<h2 id="2-workload-profiles">2. Workload profiles</h2>
+<p>The load generator uses deterministic seeds and reports input bytes, host write
+bytes/calls, flushes, blocks, partitions, compression ratio, query bytes read,
+latencies, and recovery bytes/time. Append/checkpoint percentile memory is a
+deterministic reservoir capped at 65,536 samples per stream; observation count,
+sample count, and the exact observed maximum are reported separately. The
+measured query is one record-decoding pass, not a validation scan plus a query.
+Its timer and backend counters stop before the separate deterministic
+regeneration pass; the persisted-write observer records only compact block
+metadata in the measured write path. It reassembles successful short-write
+fragments before interpreting a frame; <code>--backend-write-chunk N</code> forces this
+path through the normal CLI smoke suite.</p>
+<p>It does not retain the complete input stream in RAM. Payload size/content are
+pure functions of <code>(seed, ordinal)</code> and every payload carries its ordinal.
+Verification regenerates every retained record, compares its complete framed
+bytes, selector, time and flags, and requires a nonempty contiguous physical
+suffix ending at the final submitted ordinal. A bounded storage wrapper below
+the ring independently observes successful partition-header and block-frame
+writes, models slot replacement, and derives the exact expected retained
+first/count/block layout without consulting the catalog, index, <code>inspect()</code>, or
+query code. Both the pre-close and reopened stream must match this write-set
+oracle, including first/last/count/block identity, raw bytes, and rolling
+digest.
+The concurrent profile applies the same regeneration oracle to every data event
+seen while rotation is active, so a reader loop cannot pass vacuously.</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Profile</th>
+<th scope="col">Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>tiny-steady</td>
+<td>8--32 byte records at a stable rate; metadata and packing cost</td>
+</tr>
+<tr>
+<td>mixed-telemetry</td>
+<td>mostly small records with 1% in the 50--150 byte range</td>
+</tr>
+<tr>
+<td>burst</td>
+<td>high peak followed by idle; queue/backpressure and checkpoint tail</td>
+</tr>
+<tr>
+<td>sparse</td>
+<td>one/few records per durability interval; worst partial-block overhead</td>
+</tr>
+<tr>
+<td>compressible</td>
+<td>repeated/zero-heavy binary and text logs; codec benefit</td>
+</tr>
+<tr>
+<td>incompressible</td>
+<td>deterministic pseudo-random payload; fallback overhead</td>
+</tr>
+<tr>
+<td>disordered-time</td>
+<td>bounded regressions, duplicates, large jump, 1970-to-synced</td>
+</tr>
+<tr>
+<td>hot-rotation</td>
+<td>very small test partitions; generation/race behavior</td>
+</tr>
+<tr>
+<td>concurrent-read</td>
+<td>several range readers during sustained write/rotation</td>
+</tr>
+<tr>
+<td>log-burst</td>
+<td>variable text lines, severity/components, occasional large record</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="3-metrics-and-acceptance-gates">3. Metrics and acceptance gates</h2>
+<p>Initial software gates, independent of a particular project data rate:</p>
+<ul>
+<li>all unit/model/fault/integration tests pass under normal and sanitizer builds;</li>
+<li>every persistent decoder has malformed/truncated/overflow tests;</li>
+<li>every modeled ordinary append/seal/rotation crash preserves the exact durable
+retained baseline and returns only the explicitly materialized valid
+extension; destruction of required volume metadata has a separately asserted
+error status;</li>
+<li>a checkpointed record survives modeled crash in 100% of crash positions after
+the successful flush boundary;</li>
+<li>a non-checkpointed recovery result never claims durability and contains only
+the exact whole-frame extension allowed by that crash image;</li>
+<li>time-index property tests produce zero false-negative blocks;</li>
+<li>stale-generation property tests produce zero silently returned stale blocks;</li>
+<li>a compressed representation is selected only when smaller, so a codec never
+expands a block on media;</li>
+<li>measured host write amplification and metadata ratio are reported for every
+workload rather than hidden by an average;</li>
+<li>resident buffers remain within the documented formula for the configured
+block, active index cache, and async queue sizes.</li>
+<li>production-source coverage stays at or above 85% of executable lines and 48%
+of individual branch outcomes taken. Per-file floors cover the POSIX backend,
+memory backend, codecs, persistent format, ring, record profile, and async
+writer independently. <code>Branches executed</code> is reported only as a diagnostic
+because it proves evaluation of an expression, not both outcomes.</li>
+</ul>
+<p>Project qualification adds hardware gates:</p>
+<ul>
+<li>sustain at least the measured project peak rate with agreed CPU headroom;</li>
+<li>measure p50/p95/p99/max append, checkpoint, query, and recovery latency;</li>
+<li>verify worst checkpoint completion latency on the exact eMMC/NAND/controller
+and filesystem/block-device configuration;</li>
+<li>calculate lifetime host writes and conservative device write amplification
+against rated endurance with margin;</li>
+<li>run repeated physical power cuts and compare durable sequence markers;</li>
+<li>record kernel/filesystem/mount/cache configuration with the result.</li>
+</ul>
+<p>The configurable loss target is not claimed from <code>sync_interval</code> alone. The
+evidence is:</p>
+<p><code>maximum accepted-to-durable age = scheduling delay + queue residence + block publication + fdatasync latency</code></p>
+<p>and must be below the project target under its qualified worst-case load.
+Both synchronous and asynchronous APIs expose accepted/durable watermarks,
+sync duration, queue residence, and accepted-to-durable high-water metrics. A
+failed flush increments errors and never advances a durable watermark.
+The async wrapper accepts an optional monotonic nanosecond clock for deterministic
+deadline tests; advancing it and calling <code>notify_clock_advanced()</code> drives the
+same deadline logic used with <code>steady_clock</code> in production. Tests stall the
+backend exactly at flush and assert <code>interval + stall</code>, then repeat with a
+failed flush and require zero false durability. Boundary regressions reject an
+interval whose nanosecond representation cannot fit and drive the clock to
+<code>UINT64_MAX</code>, proving exactly one timer checkpoint rather than a busy-loop.</p>
+<h2 id="4-reproducible-commands">4. Reproducible commands</h2>
+<pre><code class="language-sh">make check          # library tests and CLI black-box tests
+make sanitize       # ASan + UBSan
+make coverage       # instrumented tests and production-source summary
+make crash-matrix   # bounded deterministic crash/fault suite
+make tsan           # native-Linux ThreadSanitizer target
+make benchmark      # deterministic workload profiles
+</code></pre>
+<p>The mock proves host call ordering and logical crash invariants. Only physical
+power-cut testing can establish that a particular controller honors flushes and
+characterize its internal write amplification.</p>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">932adfc3a4593ca4686cd808dcf9c4faf10e870612856f4547f08da44acf32c8</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
