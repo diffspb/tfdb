@@ -32,6 +32,7 @@ OUTPUT_DIR = DOCS_DIR / "html"
 
 PAGES = (
     (ROOT / "README.md", "index.html", "Overview"),
+    (DOCS_DIR / "roadmap.md", "roadmap.html", "Roadmap and handoff"),
     (DOCS_DIR / "tutorial.md", "tutorial.html", "Tutorial"),
     (DOCS_DIR / "api.md", "api.html", "C++ API"),
     (DOCS_DIR / "architecture.md", "architecture.html", "Architecture"),

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="9ccf291b3292f564d189a849b365ab13314abd4b335363cdf6a07abcf7c57ae2">
+  <meta name="tfdb-source-sha256" content="65dbc5794c6b10dd82b2c6f692ec398c76179a41cbe7025bccffa38ed38749bc">
   <title>TFDB — Telemetry Flash DB — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -18,6 +18,7 @@
       <p class="sidebar-title">Contents</p>
       <ul>
         <li><a href="index.html" aria-current="page">Overview</a></li>
+<li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
 <li><a href="architecture.html">Architecture</a></li>
@@ -80,6 +81,8 @@ with <code>python3 docs/build_html.py --check</code>. Regeneration requires
 exactly <code>markdown-it-py 3.0.0</code>; the generated pages have no runtime or network
 dependency.</p>
 <ul>
+<li><a href="roadmap.html"><code>docs/roadmap.md</code></a>: post-1.0 priorities, format-freeze
+gates, native-Linux/hardware work, and the portable project handoff;</li>
 <li><a href="architecture.html"><code>docs/architecture.md</code></a>: layers, lifecycle, durability,
 recovery, concurrency, and extension seams;</li>
 <li><a href="tutorial.html"><code>docs/tutorial.md</code></a>: runnable programmer onboarding from
@@ -116,11 +119,12 @@ backpressure and gap handling, and target-hardware qualification boundaries.</p>
 <p>The C++14 candidate is implemented and its current evidence is reproducible,
 but format v1 is not frozen. It remains a candidate until an independent Rust
 reader passes the golden/corruption vectors and target hardware passes physical
-power-cut and eight-year endurance qualification.</p>
+power-cut and eight-year endurance qualification. Continue with the ordered
+plan and new-machine checklist in <a href="roadmap.html"><code>docs/roadmap.md</code></a>.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">9ccf291b3292f564d189a849b365ab13314abd4b335363cdf6a07abcf7c57ae2</span></p>
+        <p>Source SHA-256: <span class="source-hash">65dbc5794c6b10dd82b2c6f692ec398c76179a41cbe7025bccffa38ed38749bc</span></p>
       </footer>
     </main>
   </div>

@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="cd91a8a84846f49b8214f0cdb4f83628e088b99a6601090fcf1d74ba4ceb0866">
+  <title>Post-1.0 roadmap and project handoff — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="roadmap.html" aria-current="page">Roadmap and handoff</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../roadmap.md">docs/roadmap.md</a>. The Markdown file is canonical.</p>
+      <h1 id="post-1-0-roadmap-and-project-handoff">Post-1.0 roadmap and project handoff</h1>
+<p>This is the canonical continuation plan for TFDB (Telemetry Flash DB). It is
+written so development can resume on another machine without relying on chat
+history. The architecture and evidence documents remain authoritative for
+their respective subjects.</p>
+<h2 id="1-current-baseline">1. Current baseline</h2>
+<p>The immutable source-release baseline is:</p>
+<pre><code class="language-text">library release: 1.0.0
+Git tag: v1.0.0
+Git commit: 353ee2b
+language delivered: C++14
+runtime dependencies: none beyond Linux/POSIX and the C++ standard library
+</code></pre>
+<p>The baseline contains the synchronous ring store, bounded asynchronous
+wrapper, regular-file/block-device backend, deterministic memory/fault model,
+FramedRecordV1, raw and PackBits blocks, time indexing, query/gap handling,
+five diagnostic/load tools, examples, and Markdown/HTML documentation.</p>
+<p>Reference software evidence is reproducible and recorded in
+<a href="evidence.html"><code>evidence.md</code></a>. It includes 76 library/recovery/integration tests,
+14 focused crash-matrix groups, ASan/UBSan, line/branch coverage gates, public-
+header consumers, and deterministic workload profiles. Those results describe
+the recorded WSL2 environment only.</p>
+<h3 id="two-version-axes">Two version axes</h3>
+<p>Do not confuse the library release with the persistent-format lifecycle:</p>
+<ul>
+<li><code>1.0.0</code> is the first C++ source release;</li>
+<li>format v1 is still a candidate until the independent reader and hardware
+qualification gates below pass.</li>
+</ul>
+<p>Library releases may advance without changing the on-media major. Conversely,
+an incompatible media change requires an explicit format decision and cannot
+be hidden inside a library patch release. Until format freeze, test volumes are
+not promised as permanent cross-project archives.</p>
+<h2 id="2-next-milestone">2. Next milestone</h2>
+<p>The next milestone is <strong>format-v1 qualification and freeze</strong>. It is not a
+feature milestone. Its purpose is to show that the written specification is
+independently implementable and that the original durability, retention, and
+flash-use objectives hold on an actual deployment stack.</p>
+<p>The critical path is:</p>
+<pre><code class="language-text">shared conformance corpus
+        -&gt; independent Rust reader
+        -&gt; specification ambiguities resolved
+        -&gt; native-Linux verification and real-trace replay
+        -&gt; target hardware power-cut/endurance qualification
+        -&gt; pilot application evidence
+        -&gt; format-v1 freeze
+</code></pre>
+<p>Several workstreams can proceed in parallel, but format freeze requires every
+gate in section 5.</p>
+<h2 id="3-workstreams-in-priority-order">3. Workstreams in priority order</h2>
+<h3 id="a-release-and-laboratory-hygiene">A. Release and laboratory hygiene</h3>
+<p>Complete the inexpensive repository work first:</p>
+<ol>
+<li>Choose and add a <code>LICENSE</code>; this is an owner/legal decision and must not be
+invented by an agent.</li>
+<li>Add <code>CHANGELOG.md</code> and document the distinction between source/API
+compatibility and on-media compatibility.</li>
+<li>Add install/package support suitable for consumers while preserving the
+dependency-free runtime. A <code>DESTDIR</code>-aware Make target and optional
+pkg-config/CMake package metadata are sufficient; another build system need
+not own the project.</li>
+<li>Establish CI on native Linux for GCC and Clang. Include x86-64 and the
+actual deployment architecture; ARM64 is common but must be confirmed for
+the target project.</li>
+<li>Publish release archives from immutable tags and record compiler/platform
+metadata. Do not move <code>v1.0.0</code>.</li>
+</ol>
+<p>Exit condition: a clean native-Linux checkout can build, test, install, and
+consume only public headers plus <code>libtfdb.a</code> without repository-relative paths.</p>
+<h3 id="b-shared-conformance-corpus-and-independent-rust-reader">B. Shared conformance corpus and independent Rust reader</h3>
+<p>Start Rust with a read-only implementation rather than duplicating the whole
+writer. Its purpose is to challenge the specification independently.</p>
+<ol>
+<li>Extract persistent golden bytes from C++-only test code into a versioned
+<code>testdata/format-v1/</code> corpus with a machine-readable manifest.</li>
+<li>Include valid volume, partition, block, index, footer, PackBits, and
+FramedRecordV1 objects plus truncation, CRC, bounds, unknown-feature, and
+stale-generation cases.</li>
+<li>Keep expected classifications at the contract level (<code>valid</code>, <code>corrupt</code>,
+<code>unsupported</code>, gap/overwrite semantics); diagnostic message text is not a
+cross-language ABI.</li>
+<li>Implement fixed-width little-endian decoding, checked arithmetic, CRC32C,
+PackBits, generation ordering, partition recovery, block iteration,
+FramedRecordV1 decoding, and exact selector/time filtering in Rust.</li>
+<li>Provide read-only Rust equivalents of <code>inspect</code>, <code>verify</code>, and <code>dump</code>.</li>
+<li>Run both implementations against the same corpus. The Rust code must not
+link to the C++ parser or copy its internal in-memory structures.</li>
+</ol>
+<p>Exit condition: every shared valid vector has identical observable meaning;
+every invalid vector is rejected in the documented class; live C++-generated
+volumes can be inspected and dumped independently.</p>
+<h3 id="c-native-linux-model-sanitizer-and-fuzz-qualification">C. Native-Linux model, sanitizer, and fuzz qualification</h3>
+<ol>
+<li>Extend the randomized reference model to combine append, checkpoint,
+explicit/automatic rotation, configuration transition, query, corruption,
+crash, reopen, and continued writing in one command sequence.</li>
+<li>Add coverage-guided fuzz targets for every persistent decoder and for whole
+recovered volume images. Build-time fuzz dependencies must not leak into the
+runtime library.</li>
+<li>Run ASan/UBSan and ThreadSanitizer on native Linux. Treat compiler success
+followed by a TSan runtime abort as an environmental failure, not a pass.</li>
+<li>Run a long one-writer/multi-reader hot-rotation soak and record iteration,
+gap, corruption, CPU, RSS, and latency totals.</li>
+<li>Cross-check x86-64 and ARM64 behavior and the shared media vectors.</li>
+</ol>
+<p>Exit condition: no sanitizer findings, no model mismatch, no unclassified
+decoder failure, no silent reader corruption, and no stale-generation
+resurrection.</p>
+<h3 id="d-representative-trace-replay">D. Representative trace replay</h3>
+<p>Extend <code>tfdb_loadgen</code> with deterministic trace replay before selecting final
+geometry or checkpoint intervals.</p>
+<p>The input contract should carry complete encoded bytes or reproducible payload
+descriptors, arrival/index time, selector, flags, source/service identity, and
+optional source time. It must represent:</p>
+<ul>
+<li>steady CAN and Ethernet traffic;</li>
+<li>concurrent Linux services and startup bursts;</li>
+<li>the real size distribution, including the 50--150 byte upper tail;</li>
+<li>slightly disordered arrivals;</li>
+<li>unsynchronized 1970-era source time and later synchronization;</li>
+<li>log bursts and binary/NUL-containing log payloads;</li>
+<li>overload, backpressure, and storage-stall periods.</li>
+</ul>
+<p>Do not commit proprietary or personal telemetry. Store an anonymized,
+documented corpus or a deterministic generator plus a digest of the protected
+source capture.</p>
+<p>For every candidate geometry record throughput, CPU, RSS, block utilization,
+host write calls/bytes, rotations, recovery/query time, queue residence,
+checkpoint latency, and maximum accepted-to-durable age.</p>
+<p>Exit condition: the first project's peak profile runs with agreed headroom,
+and its checkpoint/queue policy stays inside the chosen loss budget in the
+software environment.</p>
+<h3 id="e-target-storage-and-physical-power-cut-laboratory">E. Target storage and physical power-cut laboratory</h3>
+<p>Qualify each exact combination of device, controller/firmware, kernel,
+filesystem or raw-device path, mount/cache settings, and TFDB configuration.</p>
+<p>The harness needs:</p>
+<ul>
+<li>an explicitly identified expendable target device;</li>
+<li>externally controlled power removal, not process kill as a substitute;</li>
+<li>durable ordinal/session markers in generated records;</li>
+<li>cuts targeted at append, partial-block checkpoint, index/footer seal,
+partition-header replacement, and rotation, plus randomized cuts;</li>
+<li>automated reopen, <code>verify</code>, exact retained-window comparison, and continued
+writing after recovery;</li>
+<li>current/voltage and temperature scenarios appropriate to the product;</li>
+<li>machine-readable run manifests and immutable raw results.</li>
+</ul>
+<p>Required invariants are stronger than “the database opens”:</p>
+<ul>
+<li>no record covered by a successfully returned checkpoint disappears;</li>
+<li>recovered data is an exact physically ordered retained prefix/window allowed
+by the last successful durability boundary and subsequent whole valid frames;</li>
+<li>no stale overwritten generation reappears;</li>
+<li>gaps and unrecoverable authoritative-metadata damage are classified rather
+than hidden;</li>
+<li>writable recovery remains possible for every modeled ordinary tail fault.</li>
+</ul>
+<p>Measure host and device/controller write amplification separately where the
+platform exposes enough information. Combine measured rotation/write rates,
+device endurance and retention ratings, controller amplification, temperature,
+and safety margin into the eight-year calculation in <a href="sizing.html"><code>sizing.md</code></a>.</p>
+<p>Exit condition: the agreed power-loss bound and eight-year endurance margin are
+demonstrated for the exact deployment image. Results from one eMMC/NAND part do
+not qualify another.</p>
+<h3 id="f-first-production-pilot">F. First production pilot</h3>
+<p>Integrate one real storage service using the public C++ API and record its
+project-specific contract:</p>
+<ul>
+<li>record profile ID/version and payload schema registry;</li>
+<li>selector bit allocation for source, half-set, service, and message identity;</li>
+<li>arrival/index clock, source-clock preservation, time-domain IDs, and time-
+quality transitions;</li>
+<li>synchronous/async ownership and bounded <code>busy</code> retry/drop/backpressure
+policy;</li>
+<li>handling of original writer failure, corrupt/overwrite gaps, shutdown, and
+recovery;</li>
+<li>telemetry/log shared-volume decision and overload priority;</li>
+<li>metrics, alarms, health reporting, and export completeness semantics.</li>
+</ul>
+<p>Use <a href="tutorial.html"><code>tutorial.md</code></a>, <a href="api.html"><code>api.md</code></a>, and the repository's
+<code>tfdb-integration</code> skill. The integration must not format on normal startup or
+retain borrowed callback views.</p>
+<p>Exit condition: the pilot passes restart, overload, corruption/gap, graceful
+shutdown, physical power-cut, and representative-load acceptance tests with an
+operational recovery procedure.</p>
+<h2 id="4-deferred-until-measurements-justify-them">4. Deferred until measurements justify them</h2>
+<p>Do not put these on the critical path merely because extension points exist:</p>
+<ul>
+<li>built-in LZ4 or another compression codec;</li>
+<li>project-specific value indexes;</li>
+<li>reader leases that can stall rotation;</li>
+<li><code>O_DIRECT</code> or per-write synchronous I/O;</li>
+<li>encryption/authentication inside the core format;</li>
+<li>a general logging schema package;</li>
+<li>full Rust writer/API parity.</li>
+</ul>
+<p>Revisit an item only with a workload, compatibility, security, or resource
+requirement that the current design cannot meet. Record the decision and its
+media/API effect before implementation.</p>
+<p>After format freeze, implement the independent Rust writer and public API,
+then run bidirectional C++-writes/Rust-reads and Rust-writes/C++-reads crash and
+rotation tests.</p>
+<h2 id="5-format-v1-freeze-gates">5. Format-v1 freeze gates</h2>
+<p>Format v1 may be declared frozen only when all of the following are recorded:</p>
+<ul>
+<li>no unresolved format-affecting item remains in <code>docs/decisions.md</code>;</li>
+<li>C++ and independent Rust readers pass the shared valid/corrupt/unsupported
+corpus;</li>
+<li>combined state-machine, fuzz, sanitizer, native TSan, and long-soak gates
+pass;</li>
+<li>representative project replay establishes geometry, queue, and checkpoint
+settings with headroom;</li>
+<li>physical power cuts establish durability/recovery behavior on target media;</li>
+<li>the eight-year endurance calculation passes with an agreed safety margin;</li>
+<li>a real pilot validates integration and operational recovery;</li>
+<li>format/API compatibility policy and supported feature registry are published;</li>
+<li>the exact specification, vectors, evidence, and implementation revisions are
+tagged together.</li>
+</ul>
+<p>Any incompatible persistent change after that point requires a new on-media
+major or an explicitly specified compatible feature mechanism.</p>
+<h2 id="6-moving-development-to-another-computer">6. Moving development to another computer</h2>
+<h3 id="transfer">Transfer</h3>
+<p>Push the branch and annotated tags to the chosen private remote, or create a
+portable Git bundle when no remote is available:</p>
+<pre><code class="language-sh">git status --short
+git bundle create ../tfdb.bundle --all
+git bundle verify ../tfdb.bundle
+</code></pre>
+<p>On the new machine, verify the baseline before beginning work:</p>
+<pre><code class="language-sh">git log -1 --decorate --oneline v1.0.0
+git show --no-patch --format=fuller v1.0.0
+test &quot;$(tr -d '\n' &lt; VERSION)&quot; = &quot;1.0.0&quot;
+make check
+make crash-matrix
+make sanitize
+python3 docs/build_html.py --check
+</code></pre>
+<p>The HTML generator additionally requires exactly <code>markdown-it-py 3.0.0</code>.
+Native TSan, Rust, fuzzing, and hardware-lab dependencies are development/test
+requirements only and must not become TFDB runtime dependencies.</p>
+<h3 id="recommended-branch-sequence">Recommended branch sequence</h3>
+<ol>
+<li><code>qualification/conformance-corpus</code></li>
+<li><code>rust/read-only-v1</code></li>
+<li><code>qualification/native-linux</code></li>
+<li><code>tools/trace-replay</code></li>
+<li>a hardware-specific qualification branch with no secrets or destructive
+defaults</li>
+<li>a project-specific pilot integration outside the generic core where
+possible</li>
+</ol>
+<p>Keep raw evidence tied to the source, configuration, hardware identity, and
+command that produced it. Add new platform-specific evidence instead of
+overwriting the WSL2 reference artifact.</p>
+<h3 id="safe-restart-point">Safe restart point</h3>
+<p>Work that can begin without the hardware laboratory:</p>
+<ol>
+<li>decide the license and compatibility policy;</li>
+<li>extract the shared conformance corpus;</li>
+<li>implement the independent Rust reader and tools;</li>
+<li>configure native-Linux CI, TSan, fuzzing, and long soak;</li>
+<li>define and anonymize the first replay corpus;</li>
+<li>design the power-cut harness and acceptance manifest without touching a
+real block device.</li>
+</ol>
+<p>No current task requires changing the persistent format. If independent
+implementation exposes an ambiguity, update the specification, ADR, vectors,
+both readers, and evidence together before declaring format freeze.</p>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">cd91a8a84846f49b8214f0cdb4f83628e088b99a6601090fcf1d74ba4ceb0866</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

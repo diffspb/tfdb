@@ -39,7 +39,7 @@ Current results:
 - `make -C examples check` passes both complete C++14 consumers; both also pass
   with ASan/UBSan and when rebuilt outside the repository against a staged
   prefix containing only public headers and `libtfdb.a` with `-Werror`;
-- `python3 docs/build_html.py --check` validates all 11 offline HTML pages,
+- `python3 docs/build_html.py --check` validates all 12 offline HTML pages,
   source hashes, local links, and anchors; the TFDB integration skill passes
   the skill-creator structural validator;
 - `make tsan`: compilation succeeds, but the GCC ThreadSanitizer runtime aborts

@@ -55,6 +55,8 @@ with `python3 docs/build_html.py --check`. Regeneration requires
 exactly `markdown-it-py 3.0.0`; the generated pages have no runtime or network
 dependency.
 
+- [`docs/roadmap.md`](docs/roadmap.md): post-1.0 priorities, format-freeze
+  gates, native-Linux/hardware work, and the portable project handoff;
 - [`docs/architecture.md`](docs/architecture.md): layers, lifecycle, durability,
   recovery, concurrency, and extension seams;
 - [`docs/tutorial.md`](docs/tutorial.md): runnable programmer onboarding from
@@ -98,4 +100,5 @@ backpressure and gap handling, and target-hardware qualification boundaries.
 The C++14 candidate is implemented and its current evidence is reproducible,
 but format v1 is not frozen. It remains a candidate until an independent Rust
 reader passes the golden/corruption vectors and target hardware passes physical
-power-cut and eight-year endurance qualification.
+power-cut and eight-year endurance qualification. Continue with the ordered
+plan and new-machine checklist in [`docs/roadmap.md`](docs/roadmap.md).
