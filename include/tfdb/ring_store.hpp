@@ -90,9 +90,12 @@ struct StoreMetrics {
   std::uint64_t max_accepted_to_durable_ns = 0;
 };
 
-// Lock-free view of writer liveness and durability lag. Unlike metrics() and
-// writer_status(), reading it never waits behind an in-flight backend flush,
-// so a health monitor can observe a storage stall while it is happening.
+// Atomic view of writer liveness and durability lag. Unlike metrics() and
+// writer_status(), reading it never takes the store mutex or waits behind an
+// in-flight backend flush, so a health monitor can observe a storage stall
+// while it is happening. Atomic<uint64_t> need not be lock-free on every
+// supported architecture; the contract is independence from the store lock
+// and backend, not a platform lock-freedom guarantee.
 // Fields are sampled independently and may not be mutually consistent; use
 // metrics() when an exact snapshot matters more than bounded latency.
 struct WriterHealth {

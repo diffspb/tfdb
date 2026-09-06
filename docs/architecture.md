@@ -244,11 +244,14 @@ durability until reopened/recovered. Callers receive the original I/O error.
 The flush runs under the store's own lock, so every other entry point waits for
 it. That is correct for mutation and query, but it would also block the health
 check meant to detect a stalled device. `RingStore::health()` therefore reads a
-small set of values published through relaxed atomics from paths that already
-hold the lock: liveness, fault code, flush latency and counts, and the age of
-the oldest record no checkpoint covers yet. It adds no synchronization to
-`append()`, because the undurable mark is published once per checkpoint cycle
-rather than per record.
+small set of atomically published values from paths that already hold the lock:
+liveness, fault code, flush latency and counts, and the age of the oldest
+record no checkpoint covers yet. Release/acquire ordering is used only where a
+boolean publishes an associated value; independent counters remain relaxed.
+It adds no synchronization to every `append()`, because the undurable mark is
+published once per checkpoint cycle rather than per record. These atomics are
+not promised to be lock-free on every target architecture; the API contract is
+that `health()` does not take the store mutex or wait for the backend.
 
 ## 8. Recovery
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="dbe3576858c1d13f3871d0fee7df757dc82d7b69b03d54a677184d2be18972c7">
+  <meta name="tfdb-source-sha256" content="e9f007a7043990e2026fe36242735e7805951d9b8de44cf584665f5a797bcd31">
   <title>Reference verification evidence — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -80,7 +80,7 @@ evidence for this changed worktree.</p>
 and Ninja 1.13.2 from a disposable virtualenv. Reproduced on this worktree:</p>
 <ul>
 <li><code>make check</code>: <strong>81/81</strong> library/recovery/integration tests and the CLI smoke
-tests pass. Four are new: the version-consistency check, the incremental
+tests pass. Five are new: the version-consistency check, the incremental
 CRC32C equivalence check, the async thread-exception guard, and two
 writer-health cases;</li>
 <li><code>make crash-matrix</code>: all <strong>14</strong> bounded recovery groups pass;</li>
@@ -105,8 +105,8 @@ coverage-guided one; that gate stays open;</li>
 cores because the sanitized workload is memory-bound;</li>
 <li><code>make build-system-test</code>: CMake configure/build/CTest/install and the
 installed-package CMake consumer pass; Meson configure/compile/test/install
-pass. The final Meson consumer step needs a <code>pkg-config</code> binary this host
-does not have, so it remains unverified here;</li>
+pass. The final Meson consumer was subsequently verified during independent
+merge review with pkg-config 1.8.1;</li>
 <li><code>add_subdirectory()</code> consumption was checked directly: a parent project gets
 only the <code>tfdb</code> target, no <code>BUILD_TESTING</code> option, and no TFDB install rules.
 <code>-DTFDB_POSITION_INDEPENDENT_CODE=ON</code> adds <code>-fPIC</code> and the default does not;</li>
@@ -123,9 +123,14 @@ each record;</li>
 <li>removing the exception guard from <code>AsyncWriter::run()</code> makes the test binary
 abort with <code>terminate called after throwing an instance of std::runtime_error</code> and dump core, which is the failure the guard prevents.</li>
 </ul>
-<p>Rust tests and <code>make conformance</code> were <strong>not</strong> re-run here: no <code>cargo</code> on this
-host. Neither the C++ library nor its tests depend on it, but the
-cross-language gate should be re-run before this branch is relied on. <code>make tsan</code> remains unclaimed for the reason recorded below.</p>
+<p>Independent merge review re-ran all 81 tests, the 14-group crash matrix,
+ASan/UBSan, coverage, C++17, both build/install/consumer frontends, all 14 Rust
+tests, and cross-language conformance successfully. A post-correction short
+fuzz run covered 20,000 images in four shards from base seed 9072026 without a
+crash, hang, sanitizer report, or undocumented status. The correction only
+strengthened publication ordering between related writer-health atomics and
+did not change encoded bytes. <code>make tsan</code> remains unclaimed for the reason
+recorded below.</p>
 <h2 id="test-and-analysis-results">Test and analysis results</h2>
 <p>Reference environment on 2026-09-01:</p>
 <pre><code class="language-text">Linux 6.6.87.2-microsoft-standard-WSL2 x86_64
@@ -419,7 +424,7 @@ before freezing format v1.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">dbe3576858c1d13f3871d0fee7df757dc82d7b69b03d54a677184d2be18972c7</span></p>
+        <p>Source SHA-256: <span class="source-hash">e9f007a7043990e2026fe36242735e7805951d9b8de44cf584665f5a797bcd31</span></p>
       </footer>
     </main>
   </div>

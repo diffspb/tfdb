@@ -48,7 +48,7 @@ Same host and toolchain as the section above, plus CMake 4.4.3, Meson 1.12.0,
 and Ninja 1.13.2 from a disposable virtualenv. Reproduced on this worktree:
 
 - `make check`: **81/81** library/recovery/integration tests and the CLI smoke
-  tests pass. Four are new: the version-consistency check, the incremental
+  tests pass. Five are new: the version-consistency check, the incremental
   CRC32C equivalence check, the async thread-exception guard, and two
   writer-health cases;
 - `make crash-matrix`: all **14** bounded recovery groups pass;
@@ -73,8 +73,8 @@ and Ninja 1.13.2 from a disposable virtualenv. Reproduced on this worktree:
   cores because the sanitized workload is memory-bound;
 - `make build-system-test`: CMake configure/build/CTest/install and the
   installed-package CMake consumer pass; Meson configure/compile/test/install
-  pass. The final Meson consumer step needs a `pkg-config` binary this host
-  does not have, so it remains unverified here;
+  pass. The final Meson consumer was subsequently verified during independent
+  merge review with pkg-config 1.8.1;
 - `add_subdirectory()` consumption was checked directly: a parent project gets
   only the `tfdb` target, no `BUILD_TESTING` option, and no TFDB install rules.
   `-DTFDB_POSITION_INDEPENDENT_CODE=ON` adds `-fPIC` and the default does not;
@@ -92,10 +92,14 @@ Two measurements motivated changes rather than recording them:
   abort with `terminate called after throwing an instance of
   std::runtime_error` and dump core, which is the failure the guard prevents.
 
-Rust tests and `make conformance` were **not** re-run here: no `cargo` on this
-host. Neither the C++ library nor its tests depend on it, but the
-cross-language gate should be re-run before this branch is relied on. `make
-tsan` remains unclaimed for the reason recorded below.
+Independent merge review re-ran all 81 tests, the 14-group crash matrix,
+ASan/UBSan, coverage, C++17, both build/install/consumer frontends, all 14 Rust
+tests, and cross-language conformance successfully. A post-correction short
+fuzz run covered 20,000 images in four shards from base seed 9072026 without a
+crash, hang, sanitizer report, or undocumented status. The correction only
+strengthened publication ordering between related writer-health atomics and
+did not change encoded bytes. `make tsan` remains unclaimed for the reason
+recorded below.
 
 ## Test and analysis results
 

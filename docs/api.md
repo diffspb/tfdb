@@ -100,10 +100,12 @@ store's internal lock. Every other `RingStore` entry point, including
 an in-flight flush. On a stalling device those observations block for as long
 as the flush does.
 
-`health()` is the exception: it reads lock-free published values and never
-waits on the backend, so a watchdog can observe a stall while it is happening.
-Use it for liveness and durability-lag alarms, and `metrics()` when an exact,
-mutually consistent snapshot matters more than bounded latency.
+`health()` is the exception: it reads atomically published values without the
+store mutex and never waits on the backend, so a watchdog can observe a stall
+while it is happening. Use it for liveness and durability-lag alarms, and
+`metrics()` when an exact, mutually consistent snapshot matters more than
+bounded latency. The atomics are not promised to be lock-free on every target
+architecture.
 
 ## Status API
 

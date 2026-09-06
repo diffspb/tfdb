@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="6ca4e87c94363ac6dccb46b9829337534183b53bb9f38eb459a50c1fe037c1d1">
+  <meta name="tfdb-source-sha256" content="46e7ba42b3f5358b9b4ec32e0a231afeaabd3c76ffa10ed0d9b441865520d728">
   <title>TFDB C++14 API reference — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -148,10 +148,12 @@ store's internal lock. Every other <code>RingStore</code> entry point, including
 <code>metrics()</code>, <code>writer_status()</code>, <code>inspect()</code>, and <code>query_blocks()</code>, waits behind
 an in-flight flush. On a stalling device those observations block for as long
 as the flush does.</p>
-<p><code>health()</code> is the exception: it reads lock-free published values and never
-waits on the backend, so a watchdog can observe a stall while it is happening.
-Use it for liveness and durability-lag alarms, and <code>metrics()</code> when an exact,
-mutually consistent snapshot matters more than bounded latency.</p>
+<p><code>health()</code> is the exception: it reads atomically published values without the
+store mutex and never waits on the backend, so a watchdog can observe a stall
+while it is happening. Use it for liveness and durability-lag alarms, and
+<code>metrics()</code> when an exact, mutually consistent snapshot matters more than
+bounded latency. The atomics are not promised to be lock-free on every target
+architecture.</p>
 <h2 id="status-api">Status API</h2>
 <h3 id="enum-class-statuscode"><code>enum class StatusCode</code></h3>
 <div class="table-wrap"><table class="data-table">
@@ -1011,7 +1013,7 @@ power-loss and endurance requirements.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">6ca4e87c94363ac6dccb46b9829337534183b53bb9f38eb459a50c1fe037c1d1</span></p>
+        <p>Source SHA-256: <span class="source-hash">46e7ba42b3f5358b9b4ec32e0a231afeaabd3c76ffa10ed0d9b441865520d728</span></p>
       </footer>
     </main>
   </div>

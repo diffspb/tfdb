@@ -172,10 +172,10 @@ struct RingStore::Impl {
   mutable StoreMetrics metrics;
   std::vector<std::uint32_t> corrupt_slots;
 
-  // Mirrors of the few observations a watchdog needs, published with relaxed
-  // atomics so health() can read them without the mutex that a backend flush
-  // is held under. Everything here is written from paths that already hold
-  // that mutex, so no extra synchronization is introduced on the hot path.
+  // Mirrors of the few observations a watchdog needs, published atomically so
+  // health() can read them without the mutex that a backend flush is held
+  // under. Everything here is written from paths that already hold that
+  // mutex, so no extra synchronization is introduced on the hot path.
   std::atomic<bool> health_closed;
   std::atomic<bool> health_faulted;
   std::atomic<int> health_fault_code;
@@ -225,7 +225,9 @@ struct RingStore::Impl {
     fault_status = status;
     health_fault_code.store(static_cast<int>(status.code()),
                             std::memory_order_relaxed);
-    health_faulted.store(true, std::memory_order_relaxed);
+    // Publish the associated code before faulted becomes observable. Fields
+    // that have no cross-field invariant remain relaxed below.
+    health_faulted.store(true, std::memory_order_release);
     return status;
   }
 
@@ -1398,7 +1400,8 @@ Status RingStore::append_impl(ByteView record, std::int64_t time,
     impl_->oldest_undurable_record = std::chrono::steady_clock::now();
     impl_->health_oldest_undurable_ns.store(Impl::steady_now_ns(),
                                             std::memory_order_relaxed);
-    impl_->health_have_undurable.store(true, std::memory_order_relaxed);
+    // A reader that observes true must also observe the timestamp above.
+    impl_->health_have_undurable.store(true, std::memory_order_release);
   }
   return Status::Ok();
 }
@@ -1541,10 +1544,10 @@ WriterHealth RingStore::health() const {
   WriterHealth result;
   result.writable = writable_;
   result.closed = impl_->health_closed.load(std::memory_order_relaxed);
-  result.faulted = impl_->health_faulted.load(std::memory_order_relaxed);
+  result.faulted = impl_->health_faulted.load(std::memory_order_acquire);
   result.fault_code = static_cast<StatusCode>(
       impl_->health_fault_code.load(std::memory_order_relaxed));
-  if (impl_->health_have_undurable.load(std::memory_order_relaxed)) {
+  if (impl_->health_have_undurable.load(std::memory_order_acquire)) {
     const std::uint64_t since =
         impl_->health_oldest_undurable_ns.load(std::memory_order_relaxed);
     const std::uint64_t now = Impl::steady_now_ns();
