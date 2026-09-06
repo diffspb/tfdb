@@ -25,7 +25,7 @@ LIBRARY := $(BUILD_DIR)/libtfdb.a
 TOOL_NAMES := tfdb_format tfdb_inspect tfdb_verify tfdb_dump tfdb_loadgen
 TOOL_BINARIES := $(TOOL_NAMES:%=$(BUILD_DIR)/tools/%)
 
-.PHONY: all clean test tools tool-test check sanitize tsan coverage crash-matrix benchmark \
+.PHONY: all clean test tools tool-test check sanitize tsan coverage crash-matrix benchmark cxx17-check \
 	rust-build rust-test conformance build-system-test
 
 all: $(LIBRARY)
@@ -119,3 +119,13 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 -include $(LIB_OBJECTS:.o=.d)
+
+# The [[nodiscard]] on Status only engages at C++17. Prove the whole tree,
+# including tools, examples, and tests, still leaves no Status unchecked.
+cxx17-check:
+	@for source in $(LIB_SOURCES) tools/*.cpp examples/*.cpp \
+	    tests/test_main.cpp tests/make_conformance_volume.cpp; do \
+	  $(CXX) $(CPPFLAGS) -Itools -std=c++17 -Wall -Wextra -Wpedantic -Werror \
+	    -fsyntax-only "$$source" || exit 1; \
+	done
+	@echo "cxx17-check: no unchecked Status and no new warnings"

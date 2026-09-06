@@ -3,6 +3,19 @@
 
 #include <string>
 
+// Every TFDB operation reports expected failures through Status, so silently
+// dropping one is a defect. C++17 consumers get that enforced by the compiler;
+// a deliberate discard stays spelled (void)call(). C++14 has no portable
+// equivalent that a (void) cast can suppress, so the check is opt-in by
+// compiling consuming code as C++17 or later.
+#ifndef TFDB_NODISCARD
+#if defined(__cplusplus) && __cplusplus >= 201703L
+#define TFDB_NODISCARD [[nodiscard]]
+#else
+#define TFDB_NODISCARD
+#endif
+#endif
+
 namespace tfdb {
 
 enum class StatusCode {
@@ -22,7 +35,7 @@ enum class StatusCode {
   internal_error
 };
 
-class Status {
+class TFDB_NODISCARD Status {
  public:
   Status() : code_(StatusCode::ok) {}
   Status(StatusCode code, const std::string& message)
