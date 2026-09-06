@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="8aa6185f8f670754c6cd2532112e02aa15dbca0f3169be3eeb7ac87589c18970">
+  <meta name="tfdb-source-sha256" content="08568deec15e0212ab9767cf61f689bb5a50b5c7ad446d8761173770eef03e4e">
   <title>TFDB architecture — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -244,6 +244,14 @@ residence ends when an item is dequeued and therefore excludes block
 publication and backend latency.</p>
 <p>If a flush fails, the writer enters an error state and rejects further claims of
 durability until reopened/recovered. Callers receive the original I/O error.</p>
+<p>The flush runs under the store's own lock, so every other entry point waits for
+it. That is correct for mutation and query, but it would also block the health
+check meant to detect a stalled device. <code>RingStore::health()</code> therefore reads a
+small set of values published through relaxed atomics from paths that already
+hold the lock: liveness, fault code, flush latency and counts, and the age of
+the oldest record no checkpoint covers yet. It adds no synchronization to
+<code>append()</code>, because the undurable mark is published once per checkpoint cycle
+rather than per record.</p>
 <h2 id="8-recovery">8. Recovery</h2>
 <p>Open performs bounded work:</p>
 <ol>
@@ -386,7 +394,7 @@ controller, cache, and flash stack.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">8aa6185f8f670754c6cd2532112e02aa15dbca0f3169be3eeb7ac87589c18970</span></p>
+        <p>Source SHA-256: <span class="source-hash">08568deec15e0212ab9767cf61f689bb5a50b5c7ad446d8761173770eef03e4e</span></p>
       </footer>
     </main>
   </div>

@@ -1,6 +1,7 @@
 #include "tfdb/ring_store.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <limits>
 #include <set>
@@ -171,6 +172,34 @@ struct RingStore::Impl {
   mutable StoreMetrics metrics;
   std::vector<std::uint32_t> corrupt_slots;
 
+  // Mirrors of the few observations a watchdog needs, published with relaxed
+  // atomics so health() can read them without the mutex that a backend flush
+  // is held under. Everything here is written from paths that already hold
+  // that mutex, so no extra synchronization is introduced on the hot path.
+  std::atomic<bool> health_closed;
+  std::atomic<bool> health_faulted;
+  std::atomic<int> health_fault_code;
+  std::atomic<bool> health_have_undurable;
+  std::atomic<std::uint64_t> health_oldest_undurable_ns;
+  std::atomic<std::uint64_t> health_last_sync_ns;
+  std::atomic<std::uint64_t> health_max_sync_ns;
+  std::atomic<std::uint64_t> health_sync_calls;
+  std::atomic<std::uint64_t> health_sync_errors;
+  std::atomic<std::uint64_t> health_checkpoints;
+
+  Impl()
+      : health_closed(false), health_faulted(false),
+        health_fault_code(static_cast<int>(StatusCode::ok)),
+        health_have_undurable(false), health_oldest_undurable_ns(0),
+        health_last_sync_ns(0), health_max_sync_ns(0), health_sync_calls(0),
+        health_sync_errors(0), health_checkpoints(0) {}
+
+  static std::uint64_t steady_now_ns() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+  }
+
   std::uint64_t partition_base(std::uint32_t slot) const {
     return internal::kVolumePrefixSize +
            static_cast<std::uint64_t>(slot) * volume.partition_size;
@@ -194,6 +223,9 @@ struct RingStore::Impl {
     if (status.ok()) return status;
     faulted = true;
     fault_status = status;
+    health_fault_code.store(static_cast<int>(status.code()),
+                            std::memory_order_relaxed);
+    health_faulted.store(true, std::memory_order_relaxed);
     return status;
   }
 
@@ -208,8 +240,13 @@ struct RingStore::Impl {
     metrics.last_sync_duration_ns = elapsed;
     metrics.max_sync_duration_ns = std::max(metrics.max_sync_duration_ns,
                                              elapsed);
+    health_sync_calls.store(metrics.sync_calls, std::memory_order_relaxed);
+    health_last_sync_ns.store(elapsed, std::memory_order_relaxed);
+    health_max_sync_ns.store(metrics.max_sync_duration_ns,
+                             std::memory_order_relaxed);
     if (!status.ok()) {
       ++metrics.sync_errors;
+      health_sync_errors.store(metrics.sync_errors, std::memory_order_relaxed);
       return fail(status);
     }
     if (advances_durability) {
@@ -217,6 +254,7 @@ struct RingStore::Impl {
       ++metrics.checkpoints;
       metrics.durable_records = metrics.accepted_records;
       metrics.durable_blocks = metrics.published_blocks;
+      health_checkpoints.store(metrics.checkpoints, std::memory_order_relaxed);
       if (have_undurable_records) {
         const std::uint64_t age = static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -225,6 +263,7 @@ struct RingStore::Impl {
         metrics.max_accepted_to_durable_ns =
             std::max(metrics.max_accepted_to_durable_ns, age);
         have_undurable_records = false;
+        health_have_undurable.store(false, std::memory_order_relaxed);
       }
     }
     return Status::Ok();
@@ -1357,6 +1396,9 @@ Status RingStore::append_impl(ByteView record, std::int64_t time,
   if (!impl_->have_undurable_records) {
     impl_->have_undurable_records = true;
     impl_->oldest_undurable_record = std::chrono::steady_clock::now();
+    impl_->health_oldest_undurable_ns.store(Impl::steady_now_ns(),
+                                            std::memory_order_relaxed);
+    impl_->health_have_undurable.store(true, std::memory_order_relaxed);
   }
   return Status::Ok();
 }
@@ -1385,6 +1427,7 @@ Status RingStore::close() {
   if (impl_->closed) return Status::Ok();
   if (!impl_->writable) {
     impl_->closed = true;
+    impl_->health_closed.store(true, std::memory_order_relaxed);
     return Status::Ok();
   }
   if (impl_->faulted) return impl_->fault_status;
@@ -1395,6 +1438,7 @@ Status RingStore::close() {
     if (!status.ok()) return status;
   }
   impl_->closed = true;
+  impl_->health_closed.store(true, std::memory_order_relaxed);
   return Status::Ok();
 }
 
@@ -1490,6 +1534,31 @@ StoreMetrics RingStore::metrics() const {
             std::chrono::steady_clock::now() -
                 impl_->oldest_undurable_record).count());
   }
+  return result;
+}
+
+WriterHealth RingStore::health() const {
+  WriterHealth result;
+  result.writable = writable_;
+  result.closed = impl_->health_closed.load(std::memory_order_relaxed);
+  result.faulted = impl_->health_faulted.load(std::memory_order_relaxed);
+  result.fault_code = static_cast<StatusCode>(
+      impl_->health_fault_code.load(std::memory_order_relaxed));
+  if (impl_->health_have_undurable.load(std::memory_order_relaxed)) {
+    const std::uint64_t since =
+        impl_->health_oldest_undurable_ns.load(std::memory_order_relaxed);
+    const std::uint64_t now = Impl::steady_now_ns();
+    result.oldest_undurable_age_ns = now > since ? now - since : 0;
+  }
+  result.last_sync_duration_ns =
+      impl_->health_last_sync_ns.load(std::memory_order_relaxed);
+  result.max_sync_duration_ns =
+      impl_->health_max_sync_ns.load(std::memory_order_relaxed);
+  result.sync_calls = impl_->health_sync_calls.load(std::memory_order_relaxed);
+  result.sync_errors =
+      impl_->health_sync_errors.load(std::memory_order_relaxed);
+  result.checkpoints =
+      impl_->health_checkpoints.load(std::memory_order_relaxed);
   return result;
 }
 

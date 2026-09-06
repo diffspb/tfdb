@@ -492,3 +492,104 @@ TEST(reused_partition_header_torn_boundaries_do_not_resurrect_old_slot) {
     }
   }
 }
+
+TEST(health_snapshot_is_readable_while_a_flush_is_stalled) {
+  // A watchdog must be able to observe a storage stall while it happens.
+  // metrics() and writer_status() wait behind the flush by design; health()
+  // must not.
+  Fixture fixture;
+  fixture.open();
+  const char byte = 'h';
+  REQUIRE_OK(fixture.store->append(tfdb::ByteView(&byte, 1), 1));
+
+  std::mutex gate;
+  std::condition_variable gate_signal;
+  bool flush_entered = false;
+  bool flush_released = false;
+  fixture.storage->set_hook([&](tfdb::StorageOperation operation,
+                                tfdb::HookPoint point, std::uint64_t,
+                                std::uint64_t, std::size_t) {
+    if (operation != tfdb::StorageOperation::flush ||
+        point != tfdb::HookPoint::before)
+      return;
+    std::unique_lock<std::mutex> lock(gate);
+    flush_entered = true;
+    gate_signal.notify_all();
+    gate_signal.wait(lock, [&] { return flush_released; });
+  });
+
+  std::thread writer([&] { (void)fixture.store->checkpoint(); });
+  {
+    std::unique_lock<std::mutex> lock(gate);
+    REQUIRE(gate_signal.wait_for(lock, std::chrono::seconds(5),
+                                 [&] { return flush_entered; }));
+  }
+
+  // Observed from this thread while the writer holds the store lock inside
+  // flush. A regression that takes that lock here would hang instead.
+  std::atomic<bool> observed(false);
+  tfdb::WriterHealth health;
+  std::thread observer([&] {
+    health = fixture.store->health();
+    observed.store(true);
+  });
+  const std::chrono::steady_clock::time_point deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!observed.load() && std::chrono::steady_clock::now() < deadline)
+    std::this_thread::yield();
+  const bool answered = observed.load();
+  {
+    std::lock_guard<std::mutex> lock(gate);
+    flush_released = true;
+  }
+  gate_signal.notify_all();
+  observer.join();
+  writer.join();
+  fixture.storage->set_hook(tfdb::StorageHook());
+
+  REQUIRE(answered);
+  REQUIRE(health.writable);
+  REQUIRE(!health.closed);
+  REQUIRE(!health.faulted);
+  // The record accepted before the checkpoint was still undurable while the
+  // flush was in flight.
+  REQUIRE(health.oldest_undurable_age_ns > 0);
+
+  // After the checkpoint completes the lag clears and the counters advance.
+  const tfdb::WriterHealth settled = fixture.store->health();
+  REQUIRE_EQ(settled.oldest_undurable_age_ns, 0u);
+  REQUIRE(settled.sync_calls > 0);
+  REQUIRE_EQ(settled.sync_errors, 0u);
+  REQUIRE(settled.checkpoints > 0);
+}
+
+TEST(health_reports_fault_and_close_without_the_store_lock) {
+  Fixture fixture;
+  fixture.open();
+  // Fault call numbers are one-based within the current counter epoch, and
+  // the writable open already wrote a partition header.
+  fixture.storage->reset_counters();
+  tfdb::FaultRule fault;
+  fault.operation = tfdb::StorageOperation::write;
+  fault.call = 1;
+  fault.result = tfdb::StatusCode::no_space;
+  fixture.storage->add_fault(fault);
+  const char byte = 'z';
+  REQUIRE_OK(fixture.store->append(tfdb::ByteView(&byte, 1), 1));
+  REQUIRE(fixture.store->publish().code() == tfdb::StatusCode::no_space);
+
+  const tfdb::WriterHealth faulted = fixture.store->health();
+  REQUIRE(faulted.faulted);
+  REQUIRE(faulted.fault_code == tfdb::StatusCode::no_space);
+  REQUIRE(!faulted.closed);
+
+  fixture.storage->clear_faults();
+  fixture.storage->crash_discard_volatile();
+  fixture.store.reset();
+  fixture.open(false);
+  const tfdb::WriterHealth read_only = fixture.store->health();
+  REQUIRE(!read_only.writable);
+  REQUIRE(!read_only.faulted);
+  REQUIRE_OK(fixture.store->close());
+  REQUIRE(fixture.store->health().closed);
+}

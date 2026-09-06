@@ -241,6 +241,15 @@ publication and backend latency.
 If a flush fails, the writer enters an error state and rejects further claims of
 durability until reopened/recovered. Callers receive the original I/O error.
 
+The flush runs under the store's own lock, so every other entry point waits for
+it. That is correct for mutation and query, but it would also block the health
+check meant to detect a stalled device. `RingStore::health()` therefore reads a
+small set of values published through relaxed atomics from paths that already
+hold the lock: liveness, fault code, flush latency and counts, and the age of
+the oldest record no checkpoint covers yet. It adds no synchronization to
+`append()`, because the undurable mark is published once per checkpoint cycle
+rather than per record.
+
 ## 8. Recovery
 
 Open performs bounded work:

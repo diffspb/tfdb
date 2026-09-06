@@ -90,6 +90,28 @@ struct StoreMetrics {
   std::uint64_t max_accepted_to_durable_ns = 0;
 };
 
+// Lock-free view of writer liveness and durability lag. Unlike metrics() and
+// writer_status(), reading it never waits behind an in-flight backend flush,
+// so a health monitor can observe a storage stall while it is happening.
+// Fields are sampled independently and may not be mutually consistent; use
+// metrics() when an exact snapshot matters more than bounded latency.
+struct WriterHealth {
+  bool writable = false;
+  bool closed = false;
+  bool faulted = false;
+  // Meaningful only when faulted is true. metrics()/writer_status() still
+  // carry the original diagnostic message.
+  StatusCode fault_code = StatusCode::ok;
+  // Age of the oldest accepted record not yet covered by a successful
+  // checkpoint. Zero when everything accepted is durable.
+  std::uint64_t oldest_undurable_age_ns = 0;
+  std::uint64_t last_sync_duration_ns = 0;
+  std::uint64_t max_sync_duration_ns = 0;
+  std::uint64_t sync_calls = 0;
+  std::uint64_t sync_errors = 0;
+  std::uint64_t checkpoints = 0;
+};
+
 struct BlockMetadata {
   std::uint32_t partition_slot = 0;
   std::uint64_t partition_generation = 0;
@@ -202,8 +224,12 @@ class RingStore {
   Status inspect(VolumeInfo* output) const;
   Status active_partition_info(PartitionInfo* output) const;
   StoreMetrics metrics() const;
+  // Never blocks on the backend; safe to call from a watchdog while a flush
+  // is in flight. See WriterHealth.
+  WriterHealth health() const;
   // Returns OK only while this writable store can accept mutations. Unlike
-  // writable(), this reports closed and the original fault status.
+  // writable(), this reports closed and the original fault status. Waits
+  // behind an in-flight flush; use health() when that is not acceptable.
   Status writer_status() const;
   bool writable() const { return writable_; }
 

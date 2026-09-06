@@ -97,8 +97,13 @@ assumed to be free.
 `checkpoint()`, `close()`, and rotation call the backend flush while holding the
 store's internal lock. Every other `RingStore` entry point, including
 `metrics()`, `writer_status()`, `inspect()`, and `query_blocks()`, waits behind
-an in-flight flush. Size a health monitor's own timeouts accordingly: on a
-stalling device the observation blocks for as long as the flush does.
+an in-flight flush. On a stalling device those observations block for as long
+as the flush does.
+
+`health()` is the exception: it reads lock-free published values and never
+waits on the backend, so a watchdog can observe a stall while it is happening.
+Use it for liveness and durability-lag alarms, and `metrics()` when an exact,
+mutually consistent snapshot matters more than bounded latency.
 
 ## Status API
 
@@ -488,6 +493,7 @@ marked `[[deprecated]]` only because that would warn on every correct
 Status inspect(VolumeInfo* output) const;
 Status active_partition_info(PartitionInfo* output) const;
 StoreMetrics metrics() const;
+WriterHealth health() const;
 Status writer_status() const;
 bool writable() const;
 ```
@@ -505,7 +511,24 @@ contains timestamp zero.
 after close or a writer fault. `writer_status()` returns OK only while mutations
 can currently be accepted; otherwise it returns read-only `invalid_argument`,
 `closed`, or the original stored fault. Use it before attaching a new async
-wrapper and in writer health checks.
+wrapper.
+
+`health()` returns a `WriterHealth` without taking the store lock, so it stays
+responsive while a flush is in flight:
+
+| Field | Meaning |
+|---|---|
+| `writable` | capability selected at open |
+| `closed` | `close()` has completed |
+| `faulted` | a write or flush failure was recorded |
+| `fault_code` | that failure's `StatusCode`; meaningful only when `faulted` |
+| `oldest_undurable_age_ns` | age of the oldest accepted record no checkpoint covers yet; zero when everything accepted is durable |
+| `last_sync_duration_ns`, `max_sync_duration_ns` | backend flush latency |
+| `sync_calls`, `sync_errors`, `checkpoints` | flush and checkpoint counts |
+
+Fields are sampled independently and are not guaranteed mutually consistent.
+The original fault message is available from `writer_status()` and is not
+duplicated here.
 
 ### Block flags
 

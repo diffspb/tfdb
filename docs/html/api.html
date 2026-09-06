@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="c46f93ea1590010a03932def4f43de66e21e8a5e5ed9bfd501c34ed0a53517eb">
+  <meta name="tfdb-source-sha256" content="6ca4e87c94363ac6dccb46b9829337534183b53bb9f38eb459a50c1fe037c1d1">
   <title>TFDB C++14 API reference — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -146,8 +146,12 @@ assumed to be free.</p>
 <p><code>checkpoint()</code>, <code>close()</code>, and rotation call the backend flush while holding the
 store's internal lock. Every other <code>RingStore</code> entry point, including
 <code>metrics()</code>, <code>writer_status()</code>, <code>inspect()</code>, and <code>query_blocks()</code>, waits behind
-an in-flight flush. Size a health monitor's own timeouts accordingly: on a
-stalling device the observation blocks for as long as the flush does.</p>
+an in-flight flush. On a stalling device those observations block for as long
+as the flush does.</p>
+<p><code>health()</code> is the exception: it reads lock-free published values and never
+waits on the backend, so a watchdog can observe a stall while it is happening.
+Use it for liveness and durability-lag alarms, and <code>metrics()</code> when an exact,
+mutually consistent snapshot matters more than bounded latency.</p>
 <h2 id="status-api">Status API</h2>
 <h3 id="enum-class-statuscode"><code>enum class StatusCode</code></h3>
 <div class="table-wrap"><table class="data-table">
@@ -678,6 +682,7 @@ marked <code>[[deprecated]]</code> only because that would warn on every correct
 <pre><code class="language-cpp">Status inspect(VolumeInfo* output) const;
 Status active_partition_info(PartitionInfo* output) const;
 StoreMetrics metrics() const;
+WriterHealth health() const;
 Status writer_status() const;
 bool writable() const;
 </code></pre>
@@ -692,7 +697,50 @@ contains timestamp zero.</p>
 after close or a writer fault. <code>writer_status()</code> returns OK only while mutations
 can currently be accepted; otherwise it returns read-only <code>invalid_argument</code>,
 <code>closed</code>, or the original stored fault. Use it before attaching a new async
-wrapper and in writer health checks.</p>
+wrapper.</p>
+<p><code>health()</code> returns a <code>WriterHealth</code> without taking the store lock, so it stays
+responsive while a flush is in flight:</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Field</th>
+<th scope="col">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>writable</code></td>
+<td>capability selected at open</td>
+</tr>
+<tr>
+<td><code>closed</code></td>
+<td><code>close()</code> has completed</td>
+</tr>
+<tr>
+<td><code>faulted</code></td>
+<td>a write or flush failure was recorded</td>
+</tr>
+<tr>
+<td><code>fault_code</code></td>
+<td>that failure's <code>StatusCode</code>; meaningful only when <code>faulted</code></td>
+</tr>
+<tr>
+<td><code>oldest_undurable_age_ns</code></td>
+<td>age of the oldest accepted record no checkpoint covers yet; zero when everything accepted is durable</td>
+</tr>
+<tr>
+<td><code>last_sync_duration_ns</code>, <code>max_sync_duration_ns</code></td>
+<td>backend flush latency</td>
+</tr>
+<tr>
+<td><code>sync_calls</code>, <code>sync_errors</code>, <code>checkpoints</code></td>
+<td>flush and checkpoint counts</td>
+</tr>
+</tbody>
+</table></div>
+<p>Fields are sampled independently and are not guaranteed mutually consistent.
+The original fault message is available from <code>writer_status()</code> and is not
+duplicated here.</p>
 <h3 id="block-flags">Block flags</h3>
 <div class="table-wrap"><table class="data-table">
 <thead>
@@ -963,7 +1011,7 @@ power-loss and endurance requirements.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">c46f93ea1590010a03932def4f43de66e21e8a5e5ed9bfd501c34ed0a53517eb</span></p>
+        <p>Source SHA-256: <span class="source-hash">6ca4e87c94363ac6dccb46b9829337534183b53bb9f38eb459a50c1fe037c1d1</span></p>
       </footer>
     </main>
   </div>
