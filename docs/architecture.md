@@ -214,8 +214,10 @@ schedule delay + queue residence + block publication + device completion. The
 exact deployment claim must include worst-case measurements and the storage
 controller's flush correctness.
 
-The synchronous API exposes `checkpoint()` and `emergency_checkpoint()`; the
-application must schedule them. The asynchronous wrapper owns a bounded queue,
+The synchronous API exposes `checkpoint()`; the application must schedule it.
+`emergency_checkpoint()` is a deprecated alias for it and never had a separate
+code path, so hold-up-time budgeting must be measured against `checkpoint()`
+itself. The asynchronous wrapper owns a bounded queue,
 single writer thread, periodic deadline, explicit barrier, and backpressure.
 Its `submit_checked()` stores the expected record-profile/time-domain contract
 with each queued record and revalidates it in the writer thread after any

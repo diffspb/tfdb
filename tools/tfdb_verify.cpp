@@ -21,7 +21,6 @@ int main(int argc, char** argv) {
   std::uint64_t blocks = 0, raw_bytes = 0, gaps = 0;
   tfdb::QueryOptions options;
   options.continue_on_gap = true;
-  options.verify_payload_crc = true;
   status = store->scan_blocks(options, [&](const tfdb::BlockEvent& event) {
     if (event.kind == tfdb::BlockEventKind::data) {
       ++blocks;

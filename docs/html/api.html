@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="2428d7801911638e9da8b18b3b2ccdae4dc6be5cbc5c6f94e47f2446b3953dfd">
+  <meta name="tfdb-source-sha256" content="c46f93ea1590010a03932def4f43de66e21e8a5e5ed9bfd501c34ed0a53517eb">
   <title>TFDB C++14 API reference — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -594,7 +594,7 @@ Status append_checked(ByteView encoded_record,
                       std::uint32_t record_flags = 0);
 Status publish();
 Status checkpoint();
-Status emergency_checkpoint();
+[[deprecated]] Status emergency_checkpoint();  // alias for checkpoint()
 Status close();
 </code></pre>
 <p><code>append*()</code> accepts exactly one whole nonempty record, copies it, and preserves
@@ -608,7 +608,8 @@ reserved as <code>kRecordFlagUnsynchronizedTime</code> and is translated to the 
 <code>kBlockFlagUnsynchronizedTime</code>. Other low bits are reserved and ignored.</p>
 <p><code>publish()</code> emits a complete CRC-protected block but does not call <code>flush()</code>.
 <code>checkpoint()</code> publishes the current tail and makes preceding successful
-writes durable. <code>emergency_checkpoint()</code> is an alias. <code>close()</code> performs the
+writes durable. <code>emergency_checkpoint()</code> is a deprecated alias that never had
+a separate code path. <code>close()</code> performs the
 graceful final checkpoint and then causes mutating calls to return <code>closed</code>;
 repeated close succeeds.</p>
 <p>The destructor does not checkpoint.</p>
@@ -668,8 +669,11 @@ emit <code>BlockEvent</code>:</p>
 <p><code>QueryOptions::continue_on_gap</code> defaults to true. When false, the gap is first
 delivered to the visitor and then returned as the query status. Returning false
 from the visitor is a successful early stop.</p>
-<p><code>QueryOptions::verify_payload_crc</code> is ignored; live-ring CRC validation is
-mandatory.</p>
+<p><code>QueryOptions::verify_payload_crc</code> is deprecated and ignored; live-ring CRC
+validation is mandatory and setting the field to false has never disabled it.
+It is scheduled for removal with the next incompatible API change and is not
+marked <code>[[deprecated]]</code> only because that would warn on every correct
+<code>QueryOptions</code> construction.</p>
 <h3 id="inspection">Inspection</h3>
 <pre><code class="language-cpp">Status inspect(VolumeInfo* output) const;
 Status active_partition_info(PartitionInfo* output) const;
@@ -959,7 +963,7 @@ power-loss and endurance requirements.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">2428d7801911638e9da8b18b3b2ccdae4dc6be5cbc5c6f94e47f2446b3953dfd</span></p>
+        <p>Source SHA-256: <span class="source-hash">c46f93ea1590010a03932def4f43de66e21e8a5e5ed9bfd501c34ed0a53517eb</span></p>
       </footer>
     </main>
   </div>

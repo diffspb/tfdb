@@ -405,7 +405,7 @@ Status append_checked(ByteView encoded_record,
                       std::uint32_t record_flags = 0);
 Status publish();
 Status checkpoint();
-Status emergency_checkpoint();
+[[deprecated]] Status emergency_checkpoint();  // alias for checkpoint()
 Status close();
 ```
 
@@ -423,7 +423,8 @@ reserved as `kRecordFlagUnsynchronizedTime` and is translated to the block's
 
 `publish()` emits a complete CRC-protected block but does not call `flush()`.
 `checkpoint()` publishes the current tail and makes preceding successful
-writes durable. `emergency_checkpoint()` is an alias. `close()` performs the
+writes durable. `emergency_checkpoint()` is a deprecated alias that never had
+a separate code path. `close()` performs the
 graceful final checkpoint and then causes mutating calls to return `closed`;
 repeated close succeeds.
 
@@ -475,8 +476,11 @@ enum class BlockEventKind { data, overwritten_gap, corrupt_gap };
 delivered to the visitor and then returned as the query status. Returning false
 from the visitor is a successful early stop.
 
-`QueryOptions::verify_payload_crc` is ignored; live-ring CRC validation is
-mandatory.
+`QueryOptions::verify_payload_crc` is deprecated and ignored; live-ring CRC
+validation is mandatory and setting the field to false has never disabled it.
+It is scheduled for removal with the next incompatible API change and is not
+marked `[[deprecated]]` only because that would warn on every correct
+`QueryOptions` construction.
 
 ### Inspection
 

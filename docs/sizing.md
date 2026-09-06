@@ -101,7 +101,7 @@ metrics.maximum_accepted_to_durable_ns <= XXX × 1e9
 under the worst qualified peak and sparse profiles. Also require zero sync
 errors and no unbounded backpressure. A timer interval of `XXX` alone is not a
 guarantee if producers can outrun the writer. On emergency power indication,
-`emergency_checkpoint()` still needs enough hold-up time for the observed
+`checkpoint()` still needs enough hold-up time for the observed
 worst-case publication plus flush; otherwise the normal periodic bound applies.
 
 Application acknowledgment semantics must be explicit:

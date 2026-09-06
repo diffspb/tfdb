@@ -130,8 +130,11 @@ struct TimeRange {
 
 struct QueryOptions {
   bool continue_on_gap = true;
-  // CRC verification is mandatory for live-ring safety. This field is kept
-  // for source compatibility with early prototypes and is ignored.
+  // Deprecated and ignored. CRC verification is unconditional on the live
+  // ring; setting this to false has never disabled anything. Kept as a plain
+  // field rather than [[deprecated]] because a deprecated member with a
+  // default initializer warns on every QueryOptions construction, including
+  // correct ones. Scheduled for removal with the next incompatible API change.
   bool verify_payload_crc = true;
 };
 
@@ -179,6 +182,11 @@ class RingStore {
                         std::uint32_t record_flags = 0);
   Status publish();
   Status checkpoint();
+  // Deprecated: an exact alias for checkpoint(), kept only for source
+  // compatibility. The name suggested a distinct emergency path that has never
+  // existed; hold-up-time budgeting is a deployment property measured against
+  // checkpoint() itself.
+  [[deprecated("exact alias for checkpoint(); call checkpoint()")]]
   Status emergency_checkpoint() { return checkpoint(); }
   // Graceful writer shutdown. Unlike the destructor, this checkpoints a RAM
   // tail. Subsequent mutating calls return StatusCode::closed.

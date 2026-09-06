@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="a3a3984950a41dd396111777b597296b1b0690de54f64f2c7b5dfc8aa4657a38">
+  <meta name="tfdb-source-sha256" content="8aa6185f8f670754c6cd2532112e02aa15dbca0f3169be3eeb7ac87589c18970">
   <title>TFDB architecture — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -220,8 +220,10 @@ its queue drains at the qualified peak rate. The measured bound is checkpoint
 schedule delay + queue residence + block publication + device completion. The
 exact deployment claim must include worst-case measurements and the storage
 controller's flush correctness.</p>
-<p>The synchronous API exposes <code>checkpoint()</code> and <code>emergency_checkpoint()</code>; the
-application must schedule them. The asynchronous wrapper owns a bounded queue,
+<p>The synchronous API exposes <code>checkpoint()</code>; the application must schedule it.
+<code>emergency_checkpoint()</code> is a deprecated alias for it and never had a separate
+code path, so hold-up-time budgeting must be measured against <code>checkpoint()</code>
+itself. The asynchronous wrapper owns a bounded queue,
 single writer thread, periodic deadline, explicit barrier, and backpressure.
 Its <code>submit_checked()</code> stores the expected record-profile/time-domain contract
 with each queued record and revalidates it in the writer thread after any
@@ -384,7 +386,7 @@ controller, cache, and flash stack.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">a3a3984950a41dd396111777b597296b1b0690de54f64f2c7b5dfc8aa4657a38</span></p>
+        <p>Source SHA-256: <span class="source-hash">8aa6185f8f670754c6cd2532112e02aa15dbca0f3169be3eeb7ac87589c18970</span></p>
       </footer>
     </main>
   </div>

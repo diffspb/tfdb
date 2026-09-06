@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="cb45836377c8d4757fefc78927d47279d93972d6d3e22ac4b8280b007c15ee60">
+  <meta name="tfdb-source-sha256" content="9b5692d387084205c69c87f9a1582894bf7d9e2143314bfda95316f2a94b8cc7">
   <title>Sizing, loss bound, RAM, and eight-year endurance — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -161,7 +161,7 @@ is:</p>
 <p>under the worst qualified peak and sparse profiles. Also require zero sync
 errors and no unbounded backpressure. A timer interval of <code>XXX</code> alone is not a
 guarantee if producers can outrun the writer. On emergency power indication,
-<code>emergency_checkpoint()</code> still needs enough hold-up time for the observed
+<code>checkpoint()</code> still needs enough hold-up time for the observed
 worst-case publication plus flush; otherwise the normal periodic bound applies.</p>
 <p>Application acknowledgment semantics must be explicit:</p>
 <ul>
@@ -277,7 +277,7 @@ amplification and endurance margin.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">cb45836377c8d4757fefc78927d47279d93972d6d3e22ac4b8280b007c15ee60</span></p>
+        <p>Source SHA-256: <span class="source-hash">9b5692d387084205c69c87f9a1582894bf7d9e2143314bfda95316f2a94b8cc7</span></p>
       </footer>
     </main>
   </div>

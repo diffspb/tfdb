@@ -711,7 +711,7 @@ struct RingStore::Impl {
   }
 
   Status read_block(const PartitionState& partition, const IndexEntry& entry,
-                    bool verify_payload_crc, BlockMetadata* metadata,
+                    BlockMetadata* metadata,
                     std::vector<std::uint8_t>* decoded) const {
     PartitionHeader current_header;
     Status status = read_partition_header(partition.header.slot, &current_header);
@@ -770,7 +770,6 @@ struct RingStore::Impl {
         partition_base(partition.header.slot) + entry.offset + internal::kBlockHeaderEncodedSize,
         MutableByteView(stored.data(), stored.size()));
     if (!status.ok()) return status;
-    (void)verify_payload_crc;
     PartitionHeader after_read;
     status = read_partition_header(partition.header.slot, &after_read);
     if (!status.ok()) return classify_snapshot_failure(partition, status);
@@ -930,8 +929,7 @@ struct RingStore::Impl {
           continue;
         BlockMetadata metadata;
         std::vector<std::uint8_t> decoded;
-        Status status = read_block(partition, entry, options.verify_payload_crc,
-                                   &metadata, &decoded);
+        Status status = read_block(partition, entry, &metadata, &decoded);
         if (!status.ok()) {
           BlockEvent event;
           event.kind = status.code() == StatusCode::overwritten
@@ -1203,7 +1201,7 @@ Status RingStore::open(std::shared_ptr<Storage> storage,
         for (const IndexEntry& entry : indexed) {
           BlockMetadata metadata;
           std::vector<std::uint8_t> decoded;
-          strict = impl->read_block(state, entry, true, &metadata, &decoded);
+          strict = impl->read_block(state, entry, &metadata, &decoded);
           if (!strict.ok()) return strict;
         }
       }
@@ -1220,8 +1218,7 @@ Status RingStore::open(std::shared_ptr<Storage> storage,
         for (const IndexEntry& entry : state.active_index) {
           BlockMetadata metadata;
           std::vector<std::uint8_t> decoded;
-          Status strict = impl->read_block(state, entry, true, &metadata,
-                                           &decoded);
+          Status strict = impl->read_block(state, entry, &metadata, &decoded);
           if (!strict.ok()) return strict;
         }
       }
