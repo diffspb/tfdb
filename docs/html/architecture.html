@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="23cad4d496499a6ff376dbd8949e076913fc1284b7883ce671fbd61ea22baee3">
+  <meta name="tfdb-source-sha256" content="59785f4f071c08b0986a18741d1534c4da9f8ba65a7fc4debd3432285be7f749">
   <title>TFDB architecture — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,6 +21,7 @@
 <li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
 <li><a href="architecture.html" aria-current="page">Architecture</a></li>
 <li><a href="format-v1.html">Media format v1</a></li>
 <li><a href="decisions.html">Decisions</a></li>
@@ -29,6 +30,7 @@
 <li><a href="sizing.html">Sizing and endurance</a></li>
 <li><a href="evidence.html">Evidence</a></li>
 <li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
       </ul>
     </nav>
     <main id="content">
@@ -185,7 +187,9 @@ written near 1970, the recommended project envelope stores:</p>
 </ul>
 <p>This mirrors a proven logging technique without charging every telemetry format
 for fields it may not require. Approximate wall-time repair is a parser/export
-operation and never mutates the original volume.</p>
+operation and never mutates the original volume. The proposed anchor model,
+uncertainty classes, required project fields, and impossible cases are defined
+in <a href="time-reconstruction.html"><code>time-reconstruction.md</code></a>.</p>
 <h2 id="6-active-and-sealed-indexes">6. Active and sealed indexes</h2>
 <p>The writer builds the active partition index in RAM. Once a data block write
 completes, it is published in the in-process catalog. Records still in the
@@ -305,8 +309,9 @@ exact size, CRC coverage, and compatibility behavior;</li>
 migrating old partitions.</li>
 </ul>
 <p>Golden byte vectors and corruption vectors are normative alongside the written
-specification. The future Rust implementation must read C++ vectors and vice
-versa.</p>
+specification. The independent Rust reader consumes the C++-written shared
+corpus without linking C++; its API and remaining qualification boundary are
+documented in <a href="rust-reader.html"><code>rust-reader.md</code></a>.</p>
 <p>The implemented extension seams are partition-local compression registries and
 record profiles. The feature directory reserves a path for future index
 plugins. A value index would receive block summaries from a project parser,
@@ -372,7 +377,7 @@ controller, cache, and flash stack.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">23cad4d496499a6ff376dbd8949e076913fc1284b7883ce671fbd61ea22baee3</span></p>
+        <p>Source SHA-256: <span class="source-hash">59785f4f071c08b0986a18741d1534c4da9f8ba65a7fc4debd3432285be7f749</span></p>
       </footer>
     </main>
   </div>

@@ -174,7 +174,9 @@ written near 1970, the recommended project envelope stores:
 
 This mirrors a proven logging technique without charging every telemetry format
 for fields it may not require. Approximate wall-time repair is a parser/export
-operation and never mutates the original volume.
+operation and never mutates the original volume. The proposed anchor model,
+uncertainty classes, required project fields, and impossible cases are defined
+in [`time-reconstruction.md`](time-reconstruction.md).
 
 ## 6. Active and sealed indexes
 
@@ -316,8 +318,9 @@ Format changes follow these rules:
   migrating old partitions.
 
 Golden byte vectors and corruption vectors are normative alongside the written
-specification. The future Rust implementation must read C++ vectors and vice
-versa.
+specification. The independent Rust reader consumes the C++-written shared
+corpus without linking C++; its API and remaining qualification boundary are
+documented in [`rust-reader.md`](rust-reader.md).
 
 The implemented extension seams are partition-local compression registries and
 record profiles. The feature directory reserves a path for future index

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="70e78a4216efb793809979dd6240da3d5905138224851cdb4441f60a72d1e1fc">
+  <meta name="tfdb-source-sha256" content="83db513b706cddfda472c778eaa9e26e64e6d0d829fe772c23cee2cd0aa3ea40">
   <title>Architecture decision log — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,6 +21,7 @@
 <li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="format-v1.html">Media format v1</a></li>
 <li><a href="decisions.html" aria-current="page">Decisions</a></li>
@@ -29,6 +30,7 @@
 <li><a href="sizing.html">Sizing and endurance</a></li>
 <li><a href="evidence.html">Evidence</a></li>
 <li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
       </ul>
     </nav>
     <main id="content">
@@ -232,23 +234,40 @@ may be revisited before format v1 is declared stable.</p>
 <td>Retain every generated payload; validate only whatever a query happens to return</td>
 <td>Exact retention-window checks and stable memory use remain practical for long rotation workloads</td>
 </tr>
+<tr>
+<td>ADR-032</td>
+<td>Qualify v1 with a standard-library-only independent Rust reader and shared byte corpus</td>
+<td>Rust FFI to C++; duplicate writer first</td>
+<td>Challenges the specification without sharing parser logic or adding a C++ runtime dependency</td>
+</tr>
+<tr>
+<td>ADR-033</td>
+<td>Reconstruct bad wall time only in a versioned export sidecar with uncertainty and immutable originals</td>
+<td>Rewrite TFDB records; silently substitute arrival time</td>
+<td>Exact recovery is sometimes impossible; provenance and later reprocessing remain available</td>
+</tr>
+<tr>
+<td>ADR-034</td>
+<td>The v1 portable codec set is <code>none:1</code> and <code>packbits:1</code>; LZ4 ID 2 stays reserved and unimplemented</td>
+<td>Add another codec before evidence; reuse ID 2</td>
+<td>Freezes a small independently tested set without preventing a later explicitly registered codec</td>
+</tr>
 </tbody>
 </table></div>
-<h2 id="open-decisions-before-format-freeze">Open decisions before format freeze</h2>
+<h2 id="deferred-extension-decisions">Deferred extension decisions</h2>
+<p>These are not part of the portable v1 feature set and do not authorize an
+encoded-byte change. Each needs its own ADR, identifiers/vectors, both-reader
+review, and compatibility decision before implementation:</p>
 <ul>
-<li>Whether format v1 ships the simple PackBits codec only or also a reviewed
-dependency-free LZ4 block implementation.</li>
-<li>The block-summary callback and media allocation contract for future
-project-specific value indexes.</li>
-<li>Whether the proposed dual-clock logging profile belongs in this repository
-or a companion schema package.</li>
-<li>Whether very large sealed indexes need a paged reader before format freeze;
-this does not require a media change but affects peak RAM.</li>
+<li>a block-summary callback and media contract for project-specific indexes;</li>
+<li>a dual-clock common log profile in this repository or a companion package;</li>
+<li>a paged index reader if target measurements show peak RAM is too high;</li>
+<li>any codec beyond <code>none:1</code> and <code>packbits:1</code>.</li>
 </ul>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">70e78a4216efb793809979dd6240da3d5905138224851cdb4441f60a72d1e1fc</span></p>
+        <p>Source SHA-256: <span class="source-hash">83db513b706cddfda472c778eaa9e26e64e6d0d829fe772c23cee2cd0aa3ea40</span></p>
       </footer>
     </main>
   </div>

@@ -6,6 +6,8 @@ lifetime and durability contracts, and the intended production use of each
 type. On-media details are specified separately in [`format-v1.md`](format-v1.md).
 
 Start with [`tutorial.md`](tutorial.md) for an end-to-end integration.
+The independent read-only Rust API is documented in
+[`rust-reader.md`](rust-reader.md).
 
 ## API conventions
 

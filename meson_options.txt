@@ -1,0 +1,6 @@
+option('tools', type: 'boolean', value: true,
+       description: 'Build TFDB command-line tools')
+option('examples', type: 'boolean', value: true,
+       description: 'Build TFDB examples')
+option('tests', type: 'boolean', value: true,
+       description: 'Build TFDB tests')

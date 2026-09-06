@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="4b45b96ee69ec0be9415179946d6245a94a5472ec42817643d3c59eeb505a256">
+  <title>Independent Rust reader — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="roadmap.html">Roadmap and handoff</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html" aria-current="page">Rust reader</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../rust-reader.md">docs/rust-reader.md</a>. The Markdown file is canonical.</p>
+      <h1 id="independent-rust-reader">Independent Rust reader</h1>
+<p><code>rust/tfdb-reader</code> is a Linux, read-only implementation of the TFDB media
+format v1 candidate. It does not link to the C++ library, include its internal
+headers, use third-party crates, or permit <code>unsafe</code> code. Its purpose is
+interoperability review and offline/live read access; it is not a second
+writer.</p>
+<p>The implementation proves that the specification can be interpreted from
+fixed-width little-endian bytes independently. It does <strong>not</strong> by itself freeze
+format v1. The remaining freeze gates are tracked in <a href="roadmap.html"><code>roadmap.md</code></a>.</p>
+<h2 id="capabilities">Capabilities</h2>
+<p>The crate validates and exposes:</p>
+<ul>
+<li>redundant volume headers and complete geometry checks;</li>
+<li>partition identities, generations, feature directories, and time domains;</li>
+<li>sealed indexes with CRC32C, sequence/span checks, and footer summaries;</li>
+<li>footerless recovery by the longest complete block prefix;</li>
+<li>block/header/payload CRC32C and writer-incarnation chains during scans;</li>
+<li>uncompressed and TFDB PackBits v1 blocks;</li>
+<li>physical-order scans and time-domain/range candidate-block queries;</li>
+<li>overwrite and corruption gaps as explicit events;</li>
+<li>FramedRecordV1 sizes, CRC, timestamp, selector, flags, and payload.</li>
+</ul>
+<p>The reader accepts a regular file or seekable Linux block device. For a device
+wrapper that cannot seek to its end, call <code>Reader::from_file_with_size()</code> with
+an independently established size. It never writes to the descriptor.</p>
+<p>Only built-in compression IDs <code>none:1</code> and <code>packbits:1</code> are supported. A
+partition requiring another codec is <code>Unsupported</code>; it is never guessed.
+Unknown application record profiles remain opaque at the block API.</p>
+<h2 id="build-and-test">Build and test</h2>
+<p>The crate supports Rust 1.70 or later and has no crate dependencies:</p>
+<pre><code class="language-sh">cargo build --manifest-path rust/tfdb-reader/Cargo.toml --release
+cargo test --manifest-path rust/tfdb-reader/Cargo.toml
+cargo fmt --manifest-path rust/tfdb-reader/Cargo.toml -- --check
+</code></pre>
+<p>From the repository root, <code>make rust-test</code> runs its unit, conformance, and
+recovery tests. <code>make conformance</code> regenerates the shared C++ volume and checks
+both readers against every case in
+<code>testdata/format-v1/manifest.tsv</code>.</p>
+<h2 id="library-api">Library API</h2>
+<p>Open and inspect without loading all indexes:</p>
+<pre><code class="language-rust">use tfdb_reader::Reader;
+
+let reader = Reader::open(&quot;telemetry.tfdb&quot;)?;
+println!(&quot;partitions={}&quot;, reader.volume().partition_count);
+for partition in reader.partitions() {
+    println!(&quot;generation={} blocks={}&quot;,
+             partition.generation, partition.block_count);
+}
+# Ok::&lt;(), tfdb_reader::Error&gt;(())
+</code></pre>
+<p>Scan decoded blocks in physical order. Every callback receives owned bytes, so
+the block can safely outlive the call if the application moves it elsewhere:</p>
+<pre><code class="language-rust">use tfdb_reader::{Event, Reader};
+
+let reader = Reader::open(&quot;telemetry.tfdb&quot;)?;
+reader.scan_blocks(|event| {
+    match event {
+        Event::Data(block) =&gt; consume(block.metadata, block.data),
+        Event::Gap(gap) =&gt; report_gap(gap),
+    }
+    true // false stops normally
+})?;
+# Ok::&lt;(), tfdb_reader::Error&gt;(())
+</code></pre>
+<p><code>query_blocks(TimeRange, visitor)</code> applies the v1 block-envelope test in one
+nonzero time domain. It does not sort results and can return false-positive
+blocks when records inside one block are disordered. Decode FramedRecordV1 and
+apply exact record filtering above it:</p>
+<pre><code class="language-rust">use tfdb_reader::{decode_framed_v1, Event, Reader, TimeRange};
+
+let reader = Reader::open(&quot;telemetry.tfdb&quot;)?;
+reader.query_blocks(TimeRange {
+    begin_ns: 1_000,
+    end_ns: 2_000,
+    time_domain_id: 1,
+}, |event| {
+    if let Event::Data(block) = event {
+        match decode_framed_v1(&amp;block.data) {
+            Ok(records) =&gt; for record in records {
+                if (1_000..2_000).contains(&amp;record.index_time_ns) {
+                    consume_record(record);
+                }
+            },
+            Err(error) =&gt; report_decode_error(error),
+        }
+    }
+    true
+})?;
+# Ok::&lt;(), tfdb_reader::Error&gt;(())
+</code></pre>
+<p>Applications must still compare the decoded record count with
+<code>block.metadata.record_count</code>; <code>tfdb-rs-verify</code> performs that check for the
+built-in framed profile.</p>
+<p>The primary error classes are <code>InvalidArgument</code>, <code>Io</code>, <code>Corrupt</code>,
+<code>Unsupported</code>, and <code>Overwritten</code>. Diagnostic message text is not a persistent
+or cross-language ABI. Gaps are delivered as events so callers can continue
+extracting later physical blocks while recording incomplete output.</p>
+<p>Generate detailed local API pages with:</p>
+<pre><code class="language-sh">cargo doc --manifest-path rust/tfdb-reader/Cargo.toml --no-deps --open
+</code></pre>
+<p>Omit <code>--open</code> on headless or build machines.</p>
+<h2 id="command-line-tools">Command-line tools</h2>
+<p>Release binaries are written below <code>rust/tfdb-reader/target/release/</code>:</p>
+<pre><code class="language-sh">tfdb-rs-inspect STORE
+tfdb-rs-verify STORE
+tfdb-rs-dump STORE
+tfdb-rs-dump STORE --framed-v1 --from BEGIN --to END \
+  --time-domain DOMAIN --selector SELECTOR
+tfdb-rs-dump STORE --raw-blocks &gt; blocks.bin
+</code></pre>
+<p>Exit code 0 means complete success, 2 means open/argument/I/O/unsupported
+failure, and 3 means extraction completed with one or more explicit gaps.
+Raw-block output is a sequence of little-endian <code>u32</code> lengths followed by
+decoded block bytes, matching the C++ tool.</p>
+<h2 id="concurrency-boundary">Concurrency boundary</h2>
+<p>The reader snapshots partition generations at open. Before and after payload
+I/O it re-reads partition identity; detected reuse is an overwrite gap. A slow
+reader does not pin rotation. As with the C++ reader, another process that
+writes outside TFDB's single-writer protocol receives no guarantee.</p>
+<p>The current shared corpus checks byte-for-byte C++ regeneration, valid
+PackBits/raw partitions, both time domains, disordered and unsynchronized
+time, redundant-header recovery, invalid index rebuild, payload corruption,
+torn active tail, damaged partition metadata, unsupported format major, and
+truncation. Hardware durability and live-rotation soak remain separate gates.</p>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">4b45b96ee69ec0be9415179946d6245a94a5472ec42817643d3c59eeb505a256</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

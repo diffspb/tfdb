@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="e8ca5510303c427ef2f5095b3160cd0a758f493dfd020e3b02f2087a0b67a0f4">
+  <meta name="tfdb-source-sha256" content="0662e10e47857979b661396d4a8cbb5b3f58a94b682e26ede1e646dffe9a6c39">
   <title>TFDB media format v1 (candidate) — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,6 +21,7 @@
 <li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="format-v1.html" aria-current="page">Media format v1</a></li>
 <li><a href="decisions.html">Decisions</a></li>
@@ -29,6 +30,7 @@
 <li><a href="sizing.html">Sizing and endurance</a></li>
 <li><a href="evidence.html">Evidence</a></li>
 <li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
       </ul>
     </nav>
     <main id="content">
@@ -39,9 +41,11 @@ format. All multibyte integers are unsigned little-endian unless a field is
 explicitly <code>i64</code>. Signed values use the two's-complement bit pattern. Structure
 padding from a C or C++ compiler is never stored.</p>
 <p>Format v1 is still a release candidate. The byte vectors in
-<code>format_v1_normative_golden_vectors</code> are normative together with this document.
-The format becomes stable only after an independent reader validates those
-vectors and the remaining qualification gates are complete.</p>
+<code>format_v1_normative_golden_vectors</code> and the shared corpus under
+<code>testdata/format-v1/</code> are normative together with this document. The
+independent Rust reader validates the current valid/corrupt/unsupported corpus;
+the format becomes stable only after all remaining qualification gates in
+<a href="roadmap.html"><code>roadmap.md</code></a> are complete.</p>
 <h2 id="1-terminology-and-invariants">1. Terminology and invariants</h2>
 <ul>
 <li>A volume is one fixed-size regular file or Linux block device.</li>
@@ -966,7 +970,7 @@ guessed.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">e8ca5510303c427ef2f5095b3160cd0a758f493dfd020e3b02f2087a0b67a0f4</span></p>
+        <p>Source SHA-256: <span class="source-hash">0662e10e47857979b661396d4a8cbb5b3f58a94b682e26ede1e646dffe9a6c39</span></p>
       </footer>
     </main>
   </div>

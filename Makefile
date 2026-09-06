@@ -1,5 +1,6 @@
 CXX ?= c++
 AR ?= ar
+CARGO ?= cargo
 
 CPPFLAGS := -Iinclude -Isrc
 CXXFLAGS ?= -O2 -g
@@ -23,18 +24,27 @@ LIBRARY := $(BUILD_DIR)/libtfdb.a
 TOOL_NAMES := tfdb_format tfdb_inspect tfdb_verify tfdb_dump tfdb_loadgen
 TOOL_BINARIES := $(TOOL_NAMES:%=$(BUILD_DIR)/tools/%)
 
-.PHONY: all clean test tools tool-test check sanitize tsan coverage crash-matrix benchmark
+.PHONY: all clean test tools tool-test check sanitize tsan coverage crash-matrix benchmark \
+	rust-build rust-test conformance build-system-test
 
 all: $(LIBRARY)
 
 TEST_BINARY := $(BUILD_DIR)/tests/tfdb_tests
+TEST_CASES := $(wildcard tests/cases/*.inc)
+CONFORMANCE_WRITER := $(BUILD_DIR)/tests/tfdb_make_conformance_volume
+RUST_MANIFEST := rust/tfdb-reader/Cargo.toml
+RUST_TARGET_DIR := $(abspath $(BUILD_DIR)/rust)
 
-$(TEST_BINARY): tests/test_main.cpp $(LIBRARY)
+$(TEST_BINARY): tests/test_main.cpp $(TEST_CASES) $(LIBRARY)
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(LIBRARY) $(LDFLAGS) -o $@
 
 test: $(TEST_BINARY)
 	$(TEST_BINARY)
+
+$(CONFORMANCE_WRITER): tests/make_conformance_volume.cpp $(LIBRARY)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(LIBRARY) $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/tools/%: tools/%.cpp tools/common.hpp $(LIBRARY)
 	@mkdir -p $(@D)
@@ -46,6 +56,20 @@ tool-test: tools
 	TOOL_DIR=$(abspath $(BUILD_DIR)/tools) bash tests/tool_smoke.sh
 
 check: test tool-test
+
+rust-build:
+	CARGO_TARGET_DIR=$(RUST_TARGET_DIR) $(CARGO) build --manifest-path $(RUST_MANIFEST) --bins
+
+rust-test:
+	CARGO_TARGET_DIR=$(RUST_TARGET_DIR) $(CARGO) test --manifest-path $(RUST_MANIFEST)
+
+conformance: tools $(CONFORMANCE_WRITER) rust-build
+	CPP_TOOL_DIR=$(abspath $(BUILD_DIR)/tools) \
+	CONFORMANCE_WRITER=$(abspath $(CONFORMANCE_WRITER)) \
+	RUST_BIN_DIR=$(RUST_TARGET_DIR)/debug bash tests/cross_language_conformance.sh
+
+build-system-test:
+	bash tests/build_frontends.sh
 
 sanitize:
 	ASAN_OPTIONS=detect_leaks=0 $(MAKE) BUILD_DIR=build/sanitize \

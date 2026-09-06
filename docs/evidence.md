@@ -3,6 +3,45 @@
 This file records reproducible software evidence for the current C++14
 candidate. It is not a production eMMC/NAND qualification certificate.
 
+## Post-baseline interoperability evidence (2026-09-06)
+
+The following worktree checks ran on the same WSL2 kernel family with g++
+13.3.0, CMake 3.28.3, Meson 1.3.2, Ninja 1.11.1, and rustc/cargo 1.75.0. These
+tools are build/test dependencies only; neither the C++ runtime nor the Rust
+reader has a third-party runtime/library dependency.
+
+- The original 3015-line C++ test source is now a 260-line runner/support file
+  plus six thematic scenario files of 320--514 lines. The same 76/76 tests pass.
+- CMake/Ninja and Meson/Ninja each build the library, five C++ tools, two
+  examples, the test runner, and deterministic conformance writer; each runs
+  its unit and CLI smoke tests successfully. Both install to an isolated
+  prefix, and standalone consumers build using only installed CMake package
+  metadata or Meson-generated `tfdb.pc`, public headers, and `libtfdb.a`.
+- The Rust crate runs 14 tests: four codec/CRC/profile unit tests, three
+  decoder-robustness tests, two C++-written-volume conformance tests, and five
+  recovery/corruption tests. The decoder tests cover every truncation of each
+  persistent structure, every single-bit mutation of CRC-protected corpus
+  structures and the first record block, and 10,000 deterministic bounded
+  arbitrary inputs without panics.
+- `make conformance` regenerates the 139264-byte shared volume byte-for-byte,
+  checks its committed SHA-256
+  `7d81004d396903b4f7194a5635f31e11fbf4664ca2fa23b38a5e5588e5bac254`,
+  compares C++/Rust inspect, block-dump, and exact record-query output, and
+  requires matching classifications for all nine manifest cases.
+- The valid corpus contains four blocks, eight FramedRecordV1 records, 714 raw
+  bytes, one sealed PackBits partition, one footerless raw partition, two time
+  domains, disordered time, unsynchronized time, and an anomaly flag.
+- `cargo fmt -- --check`, `cargo check --all-targets`, and
+  `cargo doc --no-deps` pass; the 14-page committed HTML documentation mirror
+  is current and all local links/anchors validate.
+
+This closes the initial independent-reader implementation gate, not the format
+freeze. Shared feature-directory/bounds/stale-suffix/live-rotation cases,
+native-Linux fuzz/TSan/soak, trace replay, target power cuts/endurance, and a
+pilot remain open as listed in [`roadmap.md`](roadmap.md). The historical
+benchmark digest and measurements below are preserved rather than relabeled as
+evidence for this changed worktree.
+
 ## Test and analysis results
 
 Reference environment on 2026-09-01:
@@ -32,7 +71,7 @@ Current results:
   this traced environment;
 - `make coverage`: 92.2% production-source line coverage (2454 executable
   lines), 79.6% branch expressions evaluated, and 50.7% of 3571 individual
-  branch outcomes taken. The failing gates are 85% aggregate lines and 48%
+  branch outcomes taken. The passing gates are 85% aggregate lines and 48%
   aggregate outcomes, plus explicit per-file floors; notably `ring_store.cpp`
   is 93.3%/51.3%, `internal_format.cpp` 91.9%/46.1%, and
   `async_writer.cpp` 97.3%/62.2% lines/outcomes;

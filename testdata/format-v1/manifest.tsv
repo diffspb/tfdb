@@ -1,0 +1,10 @@
+# case	construction	expected
+valid-mixed	valid-mixed.tfdb	valid:4-blocks:8-framed-records:714-raw-bytes
+one-volume-copy	valid-mixed;byte[0]=0x58	valid:other-volume-header-copy
+both-volume-copies	one-volume-copy;byte[4096]=0x58	corrupt:open-error
+corrupt-index	valid-mixed;byte[65536]=0x01	gap:index-rebuilt:4-blocks
+corrupt-payload	valid-mixed;byte[12416]=0x01	gap:3-readable-blocks
+torn-active-tail	valid-mixed;byte[77824]=0x58	valid:longest-prefix:3-blocks
+corrupt-partition-header	valid-mixed;byte[8192]=0x58	gap:current-volume-header-damage
+unsupported-major	valid-mixed;byte[8,4104]=0x02	unsupported:open-error
+truncated	valid-mixed;length=100000	corrupt:open-error

@@ -15,12 +15,12 @@ The project is intentionally dependency-free at runtime. It includes:
 - a POSIX file/block-device backend and a deterministic in-memory fault backend;
 - inspection, verification, extraction, and load-generation tools;
 - unit, recovery, integration, and workload tests;
-- a versioned on-media format specification intended for an independent Rust
-  implementation.
+- a versioned on-media format specification and independent Rust read-only
+  implementation with a shared conformance corpus.
 
 ## Build and verify
 
-The only runtime requirement is Linux with a C++14 standard library. The
+The only C++ runtime requirement is Linux with a C++14 standard library. The
 default build uses `make` and produces a static library.
 
 ```sh
@@ -29,6 +29,26 @@ make check
 make sanitize
 make coverage
 make benchmark
+```
+
+Equivalent CMake and Meson builds are maintained and tested:
+
+```sh
+cmake -S . -B build/cmake -G Ninja
+cmake --build build/cmake
+ctest --test-dir build/cmake --output-on-failure
+
+meson setup build/meson
+meson compile -C build/meson
+meson test -C build/meson --print-errorlogs
+```
+
+The independent, standard-library-only Rust reader and the cross-language
+corpus are checked separately so Rust never becomes a C++ runtime dependency:
+
+```sh
+make rust-test
+make conformance
 ```
 
 Public headers are under `include/tfdb/`. The core writer is synchronous and
@@ -63,6 +83,8 @@ dependency.
   provisioning through queries, async ingestion, logs, and deployment;
 - [`docs/api.md`](docs/api.md): complete public C++14 API contracts, ownership,
   errors, metrics, and extension interfaces;
+- [`docs/rust-reader.md`](docs/rust-reader.md): independent Rust API, tools,
+  recovery behavior, and conformance workflow;
 - [`docs/format-v1.md`](docs/format-v1.md): exact candidate wire format and
   compatibility rules;
 - [`docs/decisions.md`](docs/decisions.md): alternatives and their effects;
@@ -74,6 +96,8 @@ dependency.
   and reference workload measurements;
 - [`docs/logs.md`](docs/logs.md): application-log profiles, clock repair, and
   retention/security tradeoffs.
+- [`docs/time-reconstruction.md`](docs/time-reconstruction.md): a non-mutating,
+  uncertainty-aware proposal for 1970-era source timestamps.
 
 Runnable, status-checked consumer examples are under `examples/`:
 
@@ -97,8 +121,8 @@ backpressure and gap handling, and target-hardware qualification boundaries.
 
 ## Status
 
-The C++14 candidate is implemented and its current evidence is reproducible,
-but format v1 is not frozen. It remains a candidate until an independent Rust
-reader passes the golden/corruption vectors and target hardware passes physical
-power-cut and eight-year endurance qualification. Continue with the ordered
-plan and new-machine checklist in [`docs/roadmap.md`](docs/roadmap.md).
+The C++14 candidate and an independent Rust reader are implemented. Their
+shared deterministic volume and current corruption/recovery cases agree, but
+format v1 is not frozen. Native-Linux model/fuzz/TSan/soak work, representative
+replay, target power-cut/endurance qualification, and a real pilot still have
+to pass. Continue with the ordered plan in [`docs/roadmap.md`](docs/roadmap.md).

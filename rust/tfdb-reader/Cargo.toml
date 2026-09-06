@@ -1,0 +1,23 @@
+[package]
+name = "tfdb-reader"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.70"
+publish = false
+description = "Independent, dependency-free read-only implementation of TFDB media format v1"
+
+[lib]
+name = "tfdb_reader"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tfdb-rs-inspect"
+path = "src/bin/inspect.rs"
+
+[[bin]]
+name = "tfdb-rs-verify"
+path = "src/bin/verify.rs"
+
+[[bin]]
+name = "tfdb-rs-dump"
+path = "src/bin/dump.rs"

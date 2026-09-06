@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="932adfc3a4593ca4686cd808dcf9c4faf10e870612856f4547f08da44acf32c8">
+  <meta name="tfdb-source-sha256" content="d8e69dd6cfbe861519267bb0c1c66f52f58ed912c63c906a7c3cb0900ef83385">
   <title>Verification and acceptance strategy — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,6 +21,7 @@
 <li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="format-v1.html">Media format v1</a></li>
 <li><a href="decisions.html">Decisions</a></li>
@@ -29,6 +30,7 @@
 <li><a href="sizing.html">Sizing and endurance</a></li>
 <li><a href="evidence.html">Evidence</a></li>
 <li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
       </ul>
     </nav>
     <main id="content">
@@ -54,6 +56,15 @@ extreme timestamps;</li>
 <li>generation ordering and rotation selection;</li>
 <li>status/error propagation and diagnostic counters.</li>
 </ul>
+<p>The C++ test executable deliberately remains one translation unit with one
+tiny dependency-free registry, but its scenarios are split by concern under
+<code>tests/cases/</code>: format/codec, storage/recovery, query/rotation, I/O faults,
+records/readers, and async/integration. This keeps static registration simple
+while preventing one 3000-line review unit. Build frontends must track changes
+to those included scenario files.</p>
+<p>The Rust reader has module unit tests plus corpus and recovery integration
+tests. These are independent of C++ execution; the separate cross-language
+test then proves agreement against the same bytes.</p>
 <h3 id="model-and-state-machine-tests">Model and state-machine tests</h3>
 <p>A small reference model stores accepted records by generation and physical
 order. The current deterministic crash model covers append, checkpoint, crash,
@@ -240,14 +251,30 @@ make coverage       # instrumented tests and production-source summary
 make crash-matrix   # bounded deterministic crash/fault suite
 make tsan           # native-Linux ThreadSanitizer target
 make benchmark      # deterministic workload profiles
+make rust-test      # independent reader unit/corpus/recovery tests
+make conformance    # regenerate corpus and compare C++/Rust outcomes
+make build-system-test # CMake/Meson build, install, and external consumers
 </code></pre>
+<p>Alternative frontend checks are:</p>
+<pre><code class="language-sh">cmake -S . -B build/cmake -G Ninja
+cmake --build build/cmake
+ctest --test-dir build/cmake --output-on-failure
+
+meson setup build/meson
+meson compile -C build/meson
+meson test -C build/meson --print-errorlogs
+</code></pre>
+<p>Before a format-freeze candidate, also run <code>cargo fmt -- --check</code>, generate
+<code>cargo doc --no-deps</code>, regenerate the shared volume, verify its committed
+SHA-256, and have a reviewer compare the Rust behavior to <code>format-v1.md</code>
+without using C++ internals as the source of truth.</p>
 <p>The mock proves host call ordering and logical crash invariants. Only physical
 power-cut testing can establish that a particular controller honors flushes and
 characterize its internal write amplification.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">932adfc3a4593ca4686cd808dcf9c4faf10e870612856f4547f08da44acf32c8</span></p>
+        <p>Source SHA-256: <span class="source-hash">d8e69dd6cfbe861519267bb0c1c66f52f58ed912c63c906a7c3cb0900ef83385</span></p>
       </footer>
     </main>
   </div>

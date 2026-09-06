@@ -47,7 +47,8 @@ a persistent profile ID.
 ## Clock handling
 
 Logs written before clock synchronization must not be discarded or rewritten.
-The recommended exporter algorithm is:
+The complete proposal, including cases where recovery is impossible, is in
+[`time-reconstruction.md`](time-reconstruction.md). In summary, an exporter:
 
 1. group records by boot/session ID;
 2. preserve physical record order as the primary evidence;

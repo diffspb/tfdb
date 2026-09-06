@@ -35,6 +35,7 @@ PAGES = (
     (DOCS_DIR / "roadmap.md", "roadmap.html", "Roadmap and handoff"),
     (DOCS_DIR / "tutorial.md", "tutorial.html", "Tutorial"),
     (DOCS_DIR / "api.md", "api.html", "C++ API"),
+    (DOCS_DIR / "rust-reader.md", "rust-reader.html", "Rust reader"),
     (DOCS_DIR / "architecture.md", "architecture.html", "Architecture"),
     (DOCS_DIR / "format-v1.md", "format-v1.html", "Media format v1"),
     (DOCS_DIR / "decisions.md", "decisions.html", "Decisions"),
@@ -43,6 +44,7 @@ PAGES = (
     (DOCS_DIR / "sizing.md", "sizing.html", "Sizing and endurance"),
     (DOCS_DIR / "evidence.md", "evidence.html", "Evidence"),
     (DOCS_DIR / "logs.md", "logs.html", "Application logs"),
+    (DOCS_DIR / "time-reconstruction.md", "time-reconstruction.html", "Time reconstruction"),
 )
 
 STYLE = r"""/* Generated documentation asset; source: docs/build_html.py. */

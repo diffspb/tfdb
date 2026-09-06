@@ -22,6 +22,17 @@ project and hardware stack.
 - generation ordering and rotation selection;
 - status/error propagation and diagnostic counters.
 
+The C++ test executable deliberately remains one translation unit with one
+tiny dependency-free registry, but its scenarios are split by concern under
+`tests/cases/`: format/codec, storage/recovery, query/rotation, I/O faults,
+records/readers, and async/integration. This keeps static registration simple
+while preventing one 3000-line review unit. Build frontends must track changes
+to those included scenario files.
+
+The Rust reader has module unit tests plus corpus and recovery integration
+tests. These are independent of C++ execution; the separate cross-language
+test then proves agreement against the same bytes.
+
 ### Model and state-machine tests
 
 A small reference model stores accepted records by generation and physical
@@ -186,7 +197,27 @@ make coverage       # instrumented tests and production-source summary
 make crash-matrix   # bounded deterministic crash/fault suite
 make tsan           # native-Linux ThreadSanitizer target
 make benchmark      # deterministic workload profiles
+make rust-test      # independent reader unit/corpus/recovery tests
+make conformance    # regenerate corpus and compare C++/Rust outcomes
+make build-system-test # CMake/Meson build, install, and external consumers
 ```
+
+Alternative frontend checks are:
+
+```sh
+cmake -S . -B build/cmake -G Ninja
+cmake --build build/cmake
+ctest --test-dir build/cmake --output-on-failure
+
+meson setup build/meson
+meson compile -C build/meson
+meson test -C build/meson --print-errorlogs
+```
+
+Before a format-freeze candidate, also run `cargo fmt -- --check`, generate
+`cargo doc --no-deps`, regenerate the shared volume, verify its committed
+SHA-256, and have a reviewer compare the Rust behavior to `format-v1.md`
+without using C++ internals as the source of truth.
 
 The mock proves host call ordering and logical crash invariants. Only physical
 power-cut testing can establish that a particular controller honors flushes and

@@ -1,4 +1,6 @@
 /build/
 /examples/build/
+/rust/**/target/
 *.tfdb
+!/testdata/format-v1/valid-mixed.tfdb
 *.tmp

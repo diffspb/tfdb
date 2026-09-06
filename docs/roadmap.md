@@ -28,6 +28,14 @@ Reference software evidence is reproducible and recorded in
 header consumers, and deterministic workload profiles. Those results describe
 the recorded WSL2 environment only.
 
+Post-baseline work now present in the repository adds CMake and Meson build
+frontends, splits the single large test source into six thematic scenario
+files, and delivers the independent standard-library-only Rust reader and
+three read-only tools. `testdata/format-v1/valid-mixed.tfdb` is regenerated
+byte-for-byte by the C++ public API; the cross-language test compares both
+implementations over its valid and derived corruption/recovery cases. See
+[`rust-reader.md`](rust-reader.md) and [`evidence.md`](evidence.md).
+
 ### Two version axes
 
 Do not confuse the library release with the persistent-format lifecycle:
@@ -52,8 +60,8 @@ The critical path is:
 
 ```text
 shared conformance corpus
-        -> independent Rust reader
-        -> specification ambiguities resolved
+        -> independent Rust reader              [initial gate implemented]
+        -> specification ambiguities resolved   [current corpus resolved]
         -> native-Linux verification and real-trace replay
         -> target hardware power-cut/endurance qualification
         -> pilot application evidence
@@ -109,6 +117,14 @@ writer. Its purpose is to challenge the specification independently.
 Exit condition: every shared valid vector has identical observable meaning;
 every invalid vector is rejected in the documented class; live C++-generated
 volumes can be inspected and dumped independently.
+
+Current state: the independent reader implements the listed decoding,
+recovery, scan/query, profile, and tool behavior. The deterministic mixed
+volume plus eight derived cases have matching C++/Rust outcomes. Before the
+freeze gate is signed, extend the manifest with independently reviewed
+feature-directory mutations, checked-arithmetic boundaries, writer-chain stale
+suffixes, and live-rotation traces; keep those as shared cases rather than
+Rust-only tests.
 
 ### C. Native-Linux model, sanitizer, and fuzz qualification
 
@@ -307,11 +323,10 @@ overwriting the WSL2 reference artifact.
 Work that can begin without the hardware laboratory:
 
 1. decide the license and compatibility policy;
-2. extract the shared conformance corpus;
-3. implement the independent Rust reader and tools;
-4. configure native-Linux CI, TSan, fuzzing, and long soak;
-5. define and anonymize the first replay corpus;
-6. design the power-cut harness and acceptance manifest without touching a
+2. extend and independently review the shared negative corpus;
+3. configure native-Linux CI, TSan, fuzzing, and long soak;
+4. define and anonymize the first replay corpus;
+5. design the power-cut harness and acceptance manifest without touching a
    real block device.
 
 No current task requires changing the persistent format. If independent

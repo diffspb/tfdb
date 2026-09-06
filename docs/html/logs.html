@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="4088c80e8fdeaea6b34950b71610461ace057c6d0a59eaec577c5abaec7a0506">
+  <meta name="tfdb-source-sha256" content="b1ee928927229f6180b5801219c2fd1fee501e3f3882fa30327e4e56e3137604">
   <title>Application logs in TFDB — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,6 +21,7 @@
 <li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="format-v1.html">Media format v1</a></li>
 <li><a href="decisions.html">Decisions</a></li>
@@ -29,6 +30,7 @@
 <li><a href="sizing.html">Sizing and endurance</a></li>
 <li><a href="evidence.html">Evidence</a></li>
 <li><a href="logs.html" aria-current="page">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
       </ul>
     </nav>
     <main id="content">
@@ -105,7 +107,8 @@ important. A future version needs independent C++/Rust vectors before getting
 a persistent profile ID.</p>
 <h2 id="clock-handling">Clock handling</h2>
 <p>Logs written before clock synchronization must not be discarded or rewritten.
-The recommended exporter algorithm is:</p>
+The complete proposal, including cases where recovery is impossible, is in
+<a href="time-reconstruction.html"><code>time-reconstruction.md</code></a>. In summary, an exporter:</p>
 <ol>
 <li>group records by boot/session ID;</li>
 <li>preserve physical record order as the primary evidence;</li>
@@ -156,7 +159,7 @@ latency, and CPU use rather than relying only on average throughput.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">4088c80e8fdeaea6b34950b71610461ace057c6d0a59eaec577c5abaec7a0506</span></p>
+        <p>Source SHA-256: <span class="source-hash">b1ee928927229f6180b5801219c2fd1fee501e3f3882fa30327e4e56e3137604</span></p>
       </footer>
     </main>
   </div>

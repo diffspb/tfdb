@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="6a0710dbc34934193e057433f05683cd80f63aab72f5fdc266b43aeb9079d844">
+  <meta name="tfdb-source-sha256" content="e14b0d95d3cedc19314f53aae8ef6f78251242bd01f6a009c5259c10f98c5fce">
   <title>TFDB C++14 API reference — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,6 +21,7 @@
 <li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html" aria-current="page">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="format-v1.html">Media format v1</a></li>
 <li><a href="decisions.html">Decisions</a></li>
@@ -29,6 +30,7 @@
 <li><a href="sizing.html">Sizing and endurance</a></li>
 <li><a href="evidence.html">Evidence</a></li>
 <li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
       </ul>
     </nav>
     <main id="content">
@@ -38,7 +40,9 @@
 <code>include/tfdb/</code>. This document describes the public candidate API, its
 lifetime and durability contracts, and the intended production use of each
 type. On-media details are specified separately in <a href="format-v1.html"><code>format-v1.md</code></a>.</p>
-<p>Start with <a href="tutorial.html"><code>tutorial.md</code></a> for an end-to-end integration.</p>
+<p>Start with <a href="tutorial.html"><code>tutorial.md</code></a> for an end-to-end integration.
+The independent read-only Rust API is documented in
+<a href="rust-reader.html"><code>rust-reader.md</code></a>.</p>
 <h2 id="api-conventions">API conventions</h2>
 <h3 id="headers-and-namespace">Headers and namespace</h3>
 <p>All public names are in namespace <code>tfdb</code>:</p>
@@ -924,7 +928,7 @@ power-loss and endurance requirements.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">6a0710dbc34934193e057433f05683cd80f63aab72f5fdc266b43aeb9079d844</span></p>
+        <p>Source SHA-256: <span class="source-hash">e14b0d95d3cedc19314f53aae8ef6f78251242bd01f6a009c5259c10f98c5fce</span></p>
       </footer>
     </main>
   </div>

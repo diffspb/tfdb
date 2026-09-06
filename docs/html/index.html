@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="65dbc5794c6b10dd82b2c6f692ec398c76179a41cbe7025bccffa38ed38749bc">
+  <meta name="tfdb-source-sha256" content="62feac205a4a2fd7ade69ee5d4f8c54561354f04978d6c86db6dfd6f003f8ea1">
   <title>TFDB — Telemetry Flash DB — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,6 +21,7 @@
 <li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="format-v1.html">Media format v1</a></li>
 <li><a href="decisions.html">Decisions</a></li>
@@ -29,6 +30,7 @@
 <li><a href="sizing.html">Sizing and endurance</a></li>
 <li><a href="evidence.html">Evidence</a></li>
 <li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
       </ul>
     </nav>
     <main id="content">
@@ -47,17 +49,31 @@ reads use compact per-block time indexes.</p>
 <li>a POSIX file/block-device backend and a deterministic in-memory fault backend;</li>
 <li>inspection, verification, extraction, and load-generation tools;</li>
 <li>unit, recovery, integration, and workload tests;</li>
-<li>a versioned on-media format specification intended for an independent Rust
-implementation.</li>
+<li>a versioned on-media format specification and independent Rust read-only
+implementation with a shared conformance corpus.</li>
 </ul>
 <h2 id="build-and-verify">Build and verify</h2>
-<p>The only runtime requirement is Linux with a C++14 standard library. The
+<p>The only C++ runtime requirement is Linux with a C++14 standard library. The
 default build uses <code>make</code> and produces a static library.</p>
 <pre><code class="language-sh">make
 make check
 make sanitize
 make coverage
 make benchmark
+</code></pre>
+<p>Equivalent CMake and Meson builds are maintained and tested:</p>
+<pre><code class="language-sh">cmake -S . -B build/cmake -G Ninja
+cmake --build build/cmake
+ctest --test-dir build/cmake --output-on-failure
+
+meson setup build/meson
+meson compile -C build/meson
+meson test -C build/meson --print-errorlogs
+</code></pre>
+<p>The independent, standard-library-only Rust reader and the cross-language
+corpus are checked separately so Rust never becomes a C++ runtime dependency:</p>
+<pre><code class="language-sh">make rust-test
+make conformance
 </code></pre>
 <p>Public headers are under <code>include/tfdb/</code>. The core writer is synchronous and
 single-writer; <code>AsyncWriter</code> is an optional bounded-queue wrapper. Both layers
@@ -89,6 +105,8 @@ recovery, concurrency, and extension seams;</li>
 provisioning through queries, async ingestion, logs, and deployment;</li>
 <li><a href="api.html"><code>docs/api.md</code></a>: complete public C++14 API contracts, ownership,
 errors, metrics, and extension interfaces;</li>
+<li><a href="rust-reader.html"><code>docs/rust-reader.md</code></a>: independent Rust API, tools,
+recovery behavior, and conformance workflow;</li>
 <li><a href="format-v1.html"><code>docs/format-v1.md</code></a>: exact candidate wire format and
 compatibility rules;</li>
 <li><a href="decisions.html"><code>docs/decisions.md</code></a>: alternatives and their effects;</li>
@@ -100,6 +118,8 @@ endurance formulas;</li>
 and reference workload measurements;</li>
 <li><a href="logs.html"><code>docs/logs.md</code></a>: application-log profiles, clock repair, and
 retention/security tradeoffs.</li>
+<li><a href="time-reconstruction.html"><code>docs/time-reconstruction.md</code></a>: a non-mutating,
+uncertainty-aware proposal for 1970-era source timestamps.</li>
 </ul>
 <p>Runnable, status-checked consumer examples are under <code>examples/</code>:</p>
 <pre><code class="language-sh">make -C examples check
@@ -116,15 +136,15 @@ reviewing an integration. It directs the agent to the current public headers,
 safe provisioning, checked profile/time contracts, durability barriers,
 backpressure and gap handling, and target-hardware qualification boundaries.</p>
 <h2 id="status">Status</h2>
-<p>The C++14 candidate is implemented and its current evidence is reproducible,
-but format v1 is not frozen. It remains a candidate until an independent Rust
-reader passes the golden/corruption vectors and target hardware passes physical
-power-cut and eight-year endurance qualification. Continue with the ordered
-plan and new-machine checklist in <a href="roadmap.html"><code>docs/roadmap.md</code></a>.</p>
+<p>The C++14 candidate and an independent Rust reader are implemented. Their
+shared deterministic volume and current corruption/recovery cases agree, but
+format v1 is not frozen. Native-Linux model/fuzz/TSan/soak work, representative
+replay, target power-cut/endurance qualification, and a real pilot still have
+to pass. Continue with the ordered plan in <a href="roadmap.html"><code>docs/roadmap.md</code></a>.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">65dbc5794c6b10dd82b2c6f692ec398c76179a41cbe7025bccffa38ed38749bc</span></p>
+        <p>Source SHA-256: <span class="source-hash">62feac205a4a2fd7ade69ee5d4f8c54561354f04978d6c86db6dfd6f003f8ea1</span></p>
       </footer>
     </main>
   </div>

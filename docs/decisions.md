@@ -36,14 +36,17 @@ may be revisited before format v1 is declared stable.
 | ADR-029 | Async deadline and age metrics use one monotonic clock, with an injectable clock/wakeup seam | Real sleeps in deterministic tests; separate timer and metric clocks | Exact loss-bound tests include backend stalls without changing the media format or production thread model |
 | ADR-030 | Async timer uses elapsed unsigned time from the last checkpoint, bounded wait chunks, and rejects millisecond intervals that cannot fit in `uint64_t` nanoseconds | Saturating absolute deadlines; signed `duration_cast`; one enormous `wait_for` | No conversion/library-internal overflow or repeated checkpoint loop when an injected clock reaches `UINT64_MAX` |
 | ADR-031 | Load qualification uses a bounded persisted-write oracle and capped deterministic latency reservoirs | Retain every generated payload; validate only whatever a query happens to return | Exact retention-window checks and stable memory use remain practical for long rotation workloads |
+| ADR-032 | Qualify v1 with a standard-library-only independent Rust reader and shared byte corpus | Rust FFI to C++; duplicate writer first | Challenges the specification without sharing parser logic or adding a C++ runtime dependency |
+| ADR-033 | Reconstruct bad wall time only in a versioned export sidecar with uncertainty and immutable originals | Rewrite TFDB records; silently substitute arrival time | Exact recovery is sometimes impossible; provenance and later reprocessing remain available |
+| ADR-034 | The v1 portable codec set is `none:1` and `packbits:1`; LZ4 ID 2 stays reserved and unimplemented | Add another codec before evidence; reuse ID 2 | Freezes a small independently tested set without preventing a later explicitly registered codec |
 
-## Open decisions before format freeze
+## Deferred extension decisions
 
-- Whether format v1 ships the simple PackBits codec only or also a reviewed
-  dependency-free LZ4 block implementation.
-- The block-summary callback and media allocation contract for future
-  project-specific value indexes.
-- Whether the proposed dual-clock logging profile belongs in this repository
-  or a companion schema package.
-- Whether very large sealed indexes need a paged reader before format freeze;
-  this does not require a media change but affects peak RAM.
+These are not part of the portable v1 feature set and do not authorize an
+encoded-byte change. Each needs its own ADR, identifiers/vectors, both-reader
+review, and compatibility decision before implementation:
+
+- a block-summary callback and media contract for project-specific indexes;
+- a dual-clock common log profile in this repository or a companion package;
+- a paged index reader if target measurements show peak RAM is too high;
+- any codec beyond `none:1` and `packbits:1`.

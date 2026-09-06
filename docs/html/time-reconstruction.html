@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="011a64b092c7107b63d9d0d325445ac3eb345b322bc0c0c80d71599304d9115d">
+  <title>Reconstructing 1970-era timestamps (design proposal) — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="roadmap.html">Roadmap and handoff</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html" aria-current="page">Time reconstruction</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../time-reconstruction.md">docs/time-reconstruction.md</a>. The Markdown file is canonical.</p>
+      <h1 id="reconstructing-1970-era-timestamps-design-proposal">Reconstructing 1970-era timestamps (design proposal)</h1>
+<p>This document proposes an application/export-layer solution. It deliberately
+does not implement clock correction in TFDB and does not change media format
+v1. TFDB continues to preserve application-provided index time, source bytes,
+physical order, time-quality flags, and gaps without rewriting evidence.</p>
+<h2 id="conclusion-first">Conclusion first</h2>
+<p>Exact wall time cannot always be recovered. If both a source and the storage
+machine started with a 1970-era realtime clock, and records contain no trusted
+wall-time anchor, boot identity, monotonic/uptime coordinate, sequence, or
+external event correlation, many real timelines produce exactly the same
+stored bytes. No algorithm can distinguish them.</p>
+<p>Useful reconstruction is possible when each boot/session eventually has at
+least one trusted synchronization anchor and records carry a coordinate that
+survives the realtime correction. The recommended coordinate is monotonic
+nanoseconds plus a random boot/session ID. A source sequence counter can give
+order but normally cannot give elapsed time by itself.</p>
+<p>Accordingly, reconstruction output must be an estimate with provenance and
+uncertainty, never a silent replacement for the original timestamp.</p>
+<h2 id="keep-four-notions-of-time-separate">Keep four notions of time separate</h2>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Value</th>
+<th scope="col">Owner</th>
+<th scope="col">Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>source realtime</td>
+<td>MCU/Linux service</td>
+<td>original event claim; preserved in payload</td>
+</tr>
+<tr>
+<td>source monotonic/uptime</td>
+<td>same source boot</td>
+<td>stable event coordinate across realtime synchronization</td>
+</tr>
+<tr>
+<td>storage arrival realtime</td>
+<td>ingestion service</td>
+<td>normal TFDB index when locally trustworthy</td>
+</tr>
+<tr>
+<td>storage arrival monotonic</td>
+<td>storage-machine boot</td>
+<td>ordering and reconstruction when its realtime is wrong</td>
+</tr>
+</tbody>
+</table></div>
+<p>Also retain independent boot/session IDs for the source and storage machine.
+Hot/cold redundant half-sets are separate sources even when they emit the same
+message ID. Do not fit one clock model across a reboot, failover, counter reset,
+or unknown gap.</p>
+<p>Format v1 stores one application-selected index timestamp and opaque payload.
+For new projects, use storage arrival realtime as the index when it is the most
+reliable query clock, but place the other fields in the project record schema.
+When storage realtime is also unsynchronized, retain the record, set the
+unsynchronized flag, and make physical scan available to exporters.</p>
+<h2 id="minimum-project-envelope">Minimum project envelope</h2>
+<p>For data that may require clock repair, the payload or its registered project
+profile should contain:</p>
+<ul>
+<li>stable logical source ID, physical half-set/address, and service ID;</li>
+<li>random 128-bit source boot/session ID;</li>
+<li>source realtime in signed nanoseconds exactly as produced;</li>
+<li>source monotonic/uptime counter, its frequency, width, and wrap rules;</li>
+<li>monotonically increasing source sequence where available;</li>
+<li>time-quality state (<code>unset</code>, <code>acquiring</code>, <code>synchronized</code>, <code>holdover</code>,
+<code>known_bad</code>) and synchronization-event marker;</li>
+<li>storage boot/session ID and storage-arrival monotonic time, added by the
+ingestion service;</li>
+<li>storage-arrival realtime and its quality state;</li>
+<li>for an anchor, the sampled realtime/monotonic pair and stated uncertainty.</li>
+</ul>
+<p>Do not use an all-zero boot ID as a normal value. If an MCU cannot create a
+random ID, combine a persistent boot counter with device identity and mark the
+weaker collision guarantee explicitly.</p>
+<p>A time-validity rule such as “year is at least 2020” is project configuration,
+not part of TFDB. It must account for legitimate historical simulations and
+future lifetime; the raw numeric value alone is not proof of synchronization.</p>
+<h2 id="proposed-reconstruction-pipeline">Proposed reconstruction pipeline</h2>
+<h3 id="1-extract-immutable-evidence">1. Extract immutable evidence</h3>
+<p>Read in physical order and retain a stable locator for every record:</p>
+<pre><code class="language-text">(volume_id, partition_generation, slot, block_sequence, record_position)
+</code></pre>
+<p>Keep the original encoded record and all timestamps. A corrupt/overwrite gap
+terminates continuity until a new independently identified session or anchor;
+the algorithm must not interpolate silently across it.</p>
+<h3 id="2-segment-clocks">2. Segment clocks</h3>
+<p>Group by source identity and source boot/session ID. Inside a group, split again
+on monotonic reset/wrap ambiguity, sequence reset, explicit reboot/failover,
+impossible rate, or discontinuity larger than the project's bound. Segment the
+storage-arrival clock independently by storage boot ID.</p>
+<p>Physical order resolves slightly interleaved arrival streams but does not mean
+source timestamps are sorted. Redundant devices must never share a segment
+solely because their logical messages match.</p>
+<h3 id="3-select-trusted-anchors">3. Select trusted anchors</h3>
+<p>An anchor is a measurement connecting stable monotonic coordinate <code>M</code> to wall
+time <code>W</code>, with uncertainty <code>U</code>. Prefer explicit synchronization telemetry
+produced after the clock service declares lock. Cross-check it against storage
+arrival and known external events. Reject isolated anchors that violate
+monotonic order, allowed slew/rate, session identity, or transport-delay
+bounds.</p>
+<p>One anchor determines an offset but not clock-rate error. Two or more separated
+anchors allow a bounded affine model:</p>
+<pre><code class="language-text">W(M) = W0 + slope * (M - M0)
+</code></pre>
+<p>Fit per segment, constrain <code>slope</code> by the oscillator/synchronization policy,
+and use a robust estimator so one bad synchronization sample cannot shift a
+whole boot. Because the deployed systems slew rather than step time backward,
+the accepted mapping should be nondecreasing. A forward synchronization step
+starts a new piece or a documented transition interval; do not smear an
+instantaneous step backward over earlier records.</p>
+<h3 id="4-estimate-and-bound">4. Estimate and bound</h3>
+<p>For records between anchors, interpolate with the local model. For pre-sync
+records, extrapolate backward from the first trusted anchor using source
+monotonic time. Uncertainty should grow at least as:</p>
+<pre><code class="language-text">anchor uncertainty
++ oscillator drift bound × distance from anchor
++ timestamp sampling error
++ bounded transport/queue uncertainty when arrival time is used
+</code></pre>
+<p>If only ordering is known, emit an ordered interval or <code>order_only</code>, not a
+fabricated nanosecond. If source monotonic is absent but storage arrival
+monotonic and bounded delivery latency are present, provide a wider arrival-
+based interval. If no defensible bound exists, leave reconstructed time empty.</p>
+<h3 id="5-publish-a-sidecar-view">5. Publish a sidecar view</h3>
+<p>Never mutate the TFDB volume or original message. The exporter should emit:</p>
+<pre><code class="language-text">original_source_time_ns
+reconstructed_time_ns (optional)
+lower_bound_ns / upper_bound_ns (optional)
+method
+quality
+anchor IDs and model revision
+physical record locator
+</code></pre>
+<p>Suggested quality classes are:</p>
+<ul>
+<li><code>observed_trusted</code>: original wall clock was synchronized;</li>
+<li><code>anchored</code>: reconstructed between trusted anchors;</li>
+<li><code>extrapolated</code>: reconstructed before/after anchors with a stated bound;</li>
+<li><code>arrival_bounded</code>: only a delivery/arrival interval is defensible;</li>
+<li><code>order_only</code>: sequence is known but wall time is not;</li>
+<li><code>unrecoverable</code>: insufficient evidence or conflicting anchors.</li>
+</ul>
+<p>Corrections can be stored in an export manifest or analytical database keyed
+by the physical locator. Re-running with better anchors creates a new model
+revision; it does not rewrite history.</p>
+<h2 id="use-with-the-current-tfdb-index">Use with the current TFDB index</h2>
+<p>The TFDB block index accelerates queries in one declared time domain; it is not
+the reconstructed clock model. A 1970-era interval may require
+<code>scan_blocks()</code>/physical extraction because a normal wall-time range will not
+select it. Once extracted, reconstruction and optional timestamp sorting occur
+above TFDB.</p>
+<p>Do not insert a reconstructed value back into the source field. If a project
+needs indexed corrected views, build them as disposable derived data that can
+be regenerated from the immutable TFDB volume and correction manifest.</p>
+<p>The existing <code>time_anomaly</code> and <code>unsynchronized_time</code> aggregate flags are
+useful discovery hints, not proofs about every record. Exact record quality
+must live in the record profile.</p>
+<h2 id="important-corner-cases">Important corner cases</h2>
+<ul>
+<li>A source timestamp near 1970 may be valid test data; quality metadata wins
+over a hardcoded calendar threshold.</li>
+<li>Monotonic counters wrap. Unwrap only with documented width/frequency and a
+gap shorter than the ambiguity interval.</li>
+<li>A reboot may repeat uptime and sequence values. Boot ID is mandatory for a
+confident join.</li>
+<li>Clock synchronization can be wrong before becoming right. Require a stable
+lock interval or multiple consistent anchors.</li>
+<li>Queueing makes arrival time an upper bound only when the transport path and
+timestamp point are known; retransmission can widen or invalidate it.</li>
+<li>Slightly disordered producers are normal. Preserve physical order and fit
+each source separately.</li>
+<li>Hot standby duplicates must retain their physical source identity; dedup is
+a separate policy.</li>
+<li>A forward wall-time step can create a range with no events. A slew changes
+slope. Model these explicitly.</li>
+<li>Corruption/overwrite gaps may hide a reboot or adjustment event. Continuity
+after a gap requires a new anchor, not optimism.</li>
+</ul>
+<h2 id="qualification-plan-for-a-future-implementation">Qualification plan for a future implementation</h2>
+<p>Before shipping a reconstruction tool, build deterministic synthetic traces
+with known truth for: both clocks bad at boot; source-only and storage-only bad
+clocks; one/two/many anchors; oscillator drift; forward steps; slew; reboot;
+counter wrap; redundant half-sets; transport bursts; missing anchor; corrupt
+gap; and contradictory anchors.</p>
+<p>Measure coverage/abstention as well as timestamp error. A correct tool must
+prefer <code>order_only</code> or <code>unrecoverable</code> over an unjustified precise answer.
+Acceptance should bound the worst reconstruction error for each quality class,
+verify that reported intervals contain ground truth, and prove deterministic
+results from the same evidence/model revision.</p>
+<p>The recommended implementation is a separate offline/export library and CLI,
+not code in <code>RingStore</code>. That keeps the storage core simple, avoids migrations,
+allows project-specific clock models, and preserves the evidence needed to
+improve a reconstruction later.</p>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">011a64b092c7107b63d9d0d325445ac3eb345b322bc0c0c80d71599304d9115d</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

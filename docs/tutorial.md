@@ -60,6 +60,26 @@ This builds and runs:
 Both examples require a path that does not already exist. They never overwrite
 an existing store.
 
+CMake consumers can build TFDB directly with `add_subdirectory()` and link
+`TFDB::tfdb`, or use the installed `TFDBConfig.cmake`:
+
+```cmake
+find_package(TFDB 1 CONFIG REQUIRED)
+target_link_libraries(my_service PRIVATE TFDB::tfdb)
+```
+
+Meson consumers can use TFDB as a subproject and request
+`dependency('tfdb')`; installation also emits `tfdb.pc`:
+
+```meson
+tfdb_dep = dependency('tfdb')
+executable('my_service', 'main.cpp', dependencies: tfdb_dep)
+```
+
+Build-system options are `TFDB_BUILD_TOOLS`, `TFDB_BUILD_EXAMPLES`, and the
+standard CMake `BUILD_TESTING`; Meson uses `-Dtools=`, `-Dexamples=`, and
+`-Dtests=`. None changes the media format.
+
 The shorter fragments below focus on one API decision at a time: `report()`
 and `check()` stand for application helpers that log
 `status_code_name(status.code())` plus `status.message()` and propagate every
@@ -166,6 +186,9 @@ Use arrival time at the storage service as `index_time_ns` when source clocks
 can start in 1970 or otherwise become unreliable. Preserve the source-provided
 timestamp inside the payload for later diagnosis or repair. This keeps the
 physical/time index useful even when one producer clock is wrong.
+For systems where the storage host clock can also start unsynchronized, retain
+arrival monotonic time and boot/session identity as well; see the non-mutating
+proposal in [`time-reconstruction.md`](time-reconstruction.md).
 
 For `FramedRecordV1`:
 

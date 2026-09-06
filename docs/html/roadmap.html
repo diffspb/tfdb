@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="cd91a8a84846f49b8214f0cdb4f83628e088b99a6601090fcf1d74ba4ceb0866">
+  <meta name="tfdb-source-sha256" content="bb473a4956cf6ffc5c620ff61adf7813a7009db5bda0a9c096a380cfc0f19a3b">
   <title>Post-1.0 roadmap and project handoff — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,6 +21,7 @@
 <li><a href="roadmap.html" aria-current="page">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
 <li><a href="architecture.html">Architecture</a></li>
 <li><a href="format-v1.html">Media format v1</a></li>
 <li><a href="decisions.html">Decisions</a></li>
@@ -29,6 +30,7 @@
 <li><a href="sizing.html">Sizing and endurance</a></li>
 <li><a href="evidence.html">Evidence</a></li>
 <li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
       </ul>
     </nav>
     <main id="content">
@@ -55,6 +57,13 @@ five diagnostic/load tools, examples, and Markdown/HTML documentation.</p>
 14 focused crash-matrix groups, ASan/UBSan, line/branch coverage gates, public-
 header consumers, and deterministic workload profiles. Those results describe
 the recorded WSL2 environment only.</p>
+<p>Post-baseline work now present in the repository adds CMake and Meson build
+frontends, splits the single large test source into six thematic scenario
+files, and delivers the independent standard-library-only Rust reader and
+three read-only tools. <code>testdata/format-v1/valid-mixed.tfdb</code> is regenerated
+byte-for-byte by the C++ public API; the cross-language test compares both
+implementations over its valid and derived corruption/recovery cases. See
+<a href="rust-reader.html"><code>rust-reader.md</code></a> and <a href="evidence.html"><code>evidence.md</code></a>.</p>
 <h3 id="two-version-axes">Two version axes</h3>
 <p>Do not confuse the library release with the persistent-format lifecycle:</p>
 <ul>
@@ -73,8 +82,8 @@ independently implementable and that the original durability, retention, and
 flash-use objectives hold on an actual deployment stack.</p>
 <p>The critical path is:</p>
 <pre><code class="language-text">shared conformance corpus
-        -&gt; independent Rust reader
-        -&gt; specification ambiguities resolved
+        -&gt; independent Rust reader              [initial gate implemented]
+        -&gt; specification ambiguities resolved   [current corpus resolved]
         -&gt; native-Linux verification and real-trace replay
         -&gt; target hardware power-cut/endurance qualification
         -&gt; pilot application evidence
@@ -124,6 +133,13 @@ link to the C++ parser or copy its internal in-memory structures.</li>
 <p>Exit condition: every shared valid vector has identical observable meaning;
 every invalid vector is rejected in the documented class; live C++-generated
 volumes can be inspected and dumped independently.</p>
+<p>Current state: the independent reader implements the listed decoding,
+recovery, scan/query, profile, and tool behavior. The deterministic mixed
+volume plus eight derived cases have matching C++/Rust outcomes. Before the
+freeze gate is signed, extend the manifest with independently reviewed
+feature-directory mutations, checked-arithmetic boundaries, writer-chain stale
+suffixes, and live-rotation traces; keep those as shared cases rather than
+Rust-only tests.</p>
 <h3 id="c-native-linux-model-sanitizer-and-fuzz-qualification">C. Native-Linux model, sanitizer, and fuzz qualification</h3>
 <ol>
 <li>Extend the randomized reference model to combine append, checkpoint,
@@ -292,8 +308,7 @@ overwriting the WSL2 reference artifact.</p>
 <p>Work that can begin without the hardware laboratory:</p>
 <ol>
 <li>decide the license and compatibility policy;</li>
-<li>extract the shared conformance corpus;</li>
-<li>implement the independent Rust reader and tools;</li>
+<li>extend and independently review the shared negative corpus;</li>
 <li>configure native-Linux CI, TSan, fuzzing, and long soak;</li>
 <li>define and anonymize the first replay corpus;</li>
 <li>design the power-cut harness and acceptance manifest without touching a
@@ -305,7 +320,7 @@ both readers, and evidence together before declaring format freeze.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">cd91a8a84846f49b8214f0cdb4f83628e088b99a6601090fcf1d74ba4ceb0866</span></p>
+        <p>Source SHA-256: <span class="source-hash">bb473a4956cf6ffc5c620ff61adf7813a7009db5bda0a9c096a380cfc0f19a3b</span></p>
       </footer>
     </main>
   </div>

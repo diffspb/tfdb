@@ -6,9 +6,11 @@ explicitly `i64`. Signed values use the two's-complement bit pattern. Structure
 padding from a C or C++ compiler is never stored.
 
 Format v1 is still a release candidate. The byte vectors in
-`format_v1_normative_golden_vectors` are normative together with this document.
-The format becomes stable only after an independent reader validates those
-vectors and the remaining qualification gates are complete.
+`format_v1_normative_golden_vectors` and the shared corpus under
+`testdata/format-v1/` are normative together with this document. The
+independent Rust reader validates the current valid/corrupt/unsupported corpus;
+the format becomes stable only after all remaining qualification gates in
+[`roadmap.md`](roadmap.md) are complete.
 
 ## 1. Terminology and invariants
 
