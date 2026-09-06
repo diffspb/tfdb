@@ -327,9 +327,6 @@ pub fn decode_partition_header(input: &[u8]) -> Result<PartitionHeader> {
             _ if feature.required() => {
                 return Err(Error::unsupported("unknown required partition feature"));
             }
-            _ if feature.region_length != 0 => {
-                return Err(Error::unsupported("unknown feature reserves media space"));
-            }
             _ => {}
         }
         features.push(feature);

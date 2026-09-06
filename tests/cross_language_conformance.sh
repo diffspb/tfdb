@@ -3,6 +3,7 @@ set -euo pipefail
 
 : "${CPP_TOOL_DIR:?CPP_TOOL_DIR is required}"
 : "${CONFORMANCE_WRITER:?CONFORMANCE_WRITER is required}"
+: "${CONFORMANCE_CASE_WRITER:?CONFORMANCE_CASE_WRITER is required}"
 : "${RUST_BIN_DIR:?RUST_BIN_DIR is required}"
 
 case_dir=$(mktemp -d)
@@ -11,6 +12,23 @@ trap 'rm -rf "$case_dir"' EXIT
 generated="$case_dir/valid-mixed.tfdb"
 "$CONFORMANCE_WRITER" "$generated"
 cmp testdata/format-v1/valid-mixed.tfdb "$generated"
+
+generated_cases="$case_dir/generated-cases"
+mkdir "$generated_cases"
+"$CONFORMANCE_CASE_WRITER" "$generated" "$generated_cases"
+for name in \
+  feature-optional-metadata \
+  feature-required-unknown \
+  feature-optional-region \
+  bounds-feature-region-overflow \
+  bounds-volume-partition-size \
+  stale-writer-chain \
+  live-rotation-01-before-reuse \
+  live-rotation-02-header-reused \
+  live-rotation-03-new-block; do
+  cmp "testdata/format-v1/$name.tfdb" "$generated_cases/$name.tfdb"
+done
+sha256sum -c testdata/format-v1/SHA256SUMS
 
 set_byte() {
   local path=$1
@@ -33,6 +51,31 @@ expect_exit() {
   fi
 }
 
+compare_valid_case() {
+  local name=$1
+  local cpp_summary=$2
+  local rust_summary=$3
+  local path="$generated_cases/$name.tfdb"
+  "$CPP_TOOL_DIR/tfdb_dump" "$path" >"$case_dir/$name.cpp.blocks"
+  "$RUST_BIN_DIR/tfdb-rs-dump" "$path" >"$case_dir/$name.rust.blocks"
+  cmp "$case_dir/$name.cpp.blocks" "$case_dir/$name.rust.blocks"
+  "$CPP_TOOL_DIR/tfdb_verify" "$path" >"$case_dir/$name.cpp.verify"
+  "$RUST_BIN_DIR/tfdb-rs-verify" "$path" >"$case_dir/$name.rust.verify"
+  grep -q "^$cpp_summary$" "$case_dir/$name.cpp.verify"
+  grep -q "^$rust_summary$" "$case_dir/$name.rust.verify"
+}
+
+compare_open_failure() {
+  local name=$1
+  local cpp_class=$2
+  local rust_class=$3
+  local path="$generated_cases/$name.tfdb"
+  expect_exit 2 "$CPP_TOOL_DIR/tfdb_verify" "$path"
+  grep -q "^$cpp_class:" "$case_dir/status.stderr"
+  expect_exit 2 "$RUST_BIN_DIR/tfdb-rs-verify" "$path"
+  grep -q "$rust_class:" "$case_dir/status.stderr"
+}
+
 "$CPP_TOOL_DIR/tfdb_inspect" "$generated" >"$case_dir/cpp.inspect"
 "$RUST_BIN_DIR/tfdb-rs-inspect" "$generated" >"$case_dir/rust.inspect"
 cmp "$case_dir/cpp.inspect" "$case_dir/rust.inspect"
@@ -51,6 +94,36 @@ cmp "$case_dir/cpp.records" "$case_dir/rust.records"
 "$RUST_BIN_DIR/tfdb-rs-verify" "$generated" >"$case_dir/rust.verify"
 grep -q '^verified blocks=4 raw_bytes=714 gaps=0$' "$case_dir/cpp.verify"
 grep -q '^verified blocks=4 records=8 raw_bytes=714 gaps=0$' "$case_dir/rust.verify"
+
+# Committed feature, bounds, stale-writer, and live-rotation images are both
+# reproducible and assigned the same contract-level meaning by each reader.
+compare_valid_case feature-optional-metadata \
+  'verified blocks=4 raw_bytes=714 gaps=0' \
+  'verified blocks=4 records=8 raw_bytes=714 gaps=0'
+compare_open_failure feature-required-unknown unsupported Unsupported
+compare_open_failure feature-optional-region unsupported Unsupported
+compare_open_failure bounds-volume-partition-size corrupt Corrupt
+
+expect_exit 3 "$CPP_TOOL_DIR/tfdb_verify" \
+  "$generated_cases/bounds-feature-region-overflow.tfdb"
+grep -q '^verified blocks=1 raw_bytes=168 gaps=1$' "$case_dir/status.stdout"
+expect_exit 3 "$RUST_BIN_DIR/tfdb-rs-verify" \
+  "$generated_cases/bounds-feature-region-overflow.tfdb"
+grep -q '^verified blocks=1 records=3 raw_bytes=168 gaps=1$' \
+  "$case_dir/status.stdout"
+
+compare_valid_case stale-writer-chain \
+  'verified blocks=2 raw_bytes=400 gaps=0' \
+  'verified blocks=2 records=0 raw_bytes=400 gaps=0'
+compare_valid_case live-rotation-01-before-reuse \
+  'verified blocks=2 raw_bytes=400 gaps=0' \
+  'verified blocks=2 records=0 raw_bytes=400 gaps=0'
+compare_valid_case live-rotation-02-header-reused \
+  'verified blocks=1 raw_bytes=200 gaps=0' \
+  'verified blocks=1 records=0 raw_bytes=200 gaps=0'
+compare_valid_case live-rotation-03-new-block \
+  'verified blocks=2 raw_bytes=400 gaps=0' \
+  'verified blocks=2 records=0 raw_bytes=400 gaps=0'
 
 # Both implementations must assign the same contract-level result to derived
 # corruption/recovery cases. Exact diagnostic prose is intentionally not ABI.

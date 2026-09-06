@@ -6,13 +6,19 @@ partition and one active uncompressed partition, two time domains,
 out-of-order timestamps, an unsynchronized timestamp, an anomaly flag, and
 eight valid FramedRecordV1 records.
 
-The expected SHA-256 is
-`7d81004d396903b4f7194a5635f31e11fbf4664ca2fa23b38a5e5588e5bac254`.
-`tests/make_conformance_volume.cpp` is the reproducible writer. The
-cross-language test regenerates the file byte-for-byte, compares C++ and Rust
-inspection/block/record output, and verifies both implementations. It then
-derives the recovery/corruption cases listed in `manifest.tsv` and requires
-matching contract-level classifications; exact diagnostic wording is not ABI.
+`tests/make_conformance_volume.cpp` is its reproducible writer. The additional
+committed images cover unknown optional and required features, invalid feature
+and volume bounds, a stale writer-incarnation suffix, and three consecutive
+live-rotation snapshots. `tests/make_conformance_cases.cpp` regenerates those
+images from either the base volume or deterministic `MemoryStorage` crash and
+rotation schedules.
+
+`SHA256SUMS` protects all committed images. The cross-language test regenerates
+them byte-for-byte, compares C++ and Rust block output for every valid image,
+and requires matching contract-level classifications for every manifest case.
+The eight small legacy corruption/recovery mutations remain derived in the
+test script rather than duplicated as committed files. Exact diagnostic
+wording is not ABI.
 
 The corpus is candidate-format evidence, not permission to silently change
 format v1. Any encoded-byte change requires a new corpus, golden vectors, ADR,

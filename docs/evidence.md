@@ -13,21 +13,26 @@ reader has a third-party runtime/library dependency.
 - The original 3015-line C++ test source is now a 260-line runner/support file
   plus six thematic scenario files of 320--514 lines. The same 76/76 tests pass.
 - CMake/Ninja and Meson/Ninja each build the library, five C++ tools, two
-  examples, the test runner, and deterministic conformance writer; each runs
+  examples, the test runner, and deterministic conformance writers; each runs
   its unit and CLI smoke tests successfully. Both install to an isolated
   prefix, and standalone consumers build using only installed CMake package
   metadata or Meson-generated `tfdb.pc`, public headers, and `libtfdb.a`.
-- The Rust crate runs 14 tests: four codec/CRC/profile unit tests, three
-  decoder-robustness tests, two C++-written-volume conformance tests, and five
+- The Rust crate runs 17 tests: four codec/CRC/profile unit tests, three
+  decoder-robustness tests, five shared-volume conformance tests, and five
   recovery/corruption tests. The decoder tests cover every truncation of each
   persistent structure, every single-bit mutation of CRC-protected corpus
   structures and the first record block, and 10,000 deterministic bounded
   arbitrary inputs without panics.
-- `make conformance` regenerates the 139264-byte shared volume byte-for-byte,
-  checks its committed SHA-256
-  `7d81004d396903b4f7194a5635f31e11fbf4664ca2fa23b38a5e5588e5bac254`,
-  compares C++/Rust inspect, block-dump, and exact record-query output, and
-  requires matching classifications for all nine manifest cases.
+- `make conformance` regenerates all ten committed shared images byte-for-byte,
+  checks their committed SHA-256 manifest, compares C++/Rust block output for
+  every valid image plus base-volume inspect and exact record-query output, and
+  requires matching classifications for all 18 manifest cases. The cases add
+  unknown feature semantics, feature/volume bounds, a two-crash stale-writer
+  chain, and three live-rotation snapshots.
+- The required long media-fuzz gate ran 5,000,000 derived-image iterations
+  under ASan/UBSan as 20 independent shards of 250,000 iterations, base seed
+  `202609062200` and stride `1000003`. It completed without a crash, hang,
+  sanitizer report, undocumented status, or saved failing image.
 - The valid corpus contains four blocks, eight FramedRecordV1 records, 714 raw
   bytes, one sealed PackBits partition, one footerless raw partition, two time
   domains, disordered time, unsynchronized time, and an anomaly flag.
@@ -35,12 +40,17 @@ reader has a third-party runtime/library dependency.
   `cargo doc --no-deps` pass; the 15-page committed HTML documentation mirror
   is current and all local links/anchors validate.
 
-This closes the initial independent-reader implementation gate, not the format
-freeze. Shared feature-directory/bounds/stale-suffix/live-rotation cases,
-native-Linux fuzz/TSan/soak, trace replay, target power cuts/endurance, and a
-pilot remain open as listed in [`roadmap.md`](roadmap.md). The historical
-benchmark digest and measurements below are preserved rather than relabeled as
-evidence for this changed worktree.
+The expanded corpus exposed one classification-order difference: Rust rejected
+an unknown optional feature before checking its overflowing media range, while
+C++ classified the range as structural damage and exposed a read-only header
+gap. ADR-035 fixes the validation order and both readers now agree.
+
+This closes the named initial corpus expansion, not independent review or the
+format freeze. Native-Linux fuzz/TSan/soak, trace replay, target power
+cuts/endurance, and a pilot remain open as listed in
+[`roadmap.md`](roadmap.md). The historical benchmark digest and measurements
+below are preserved rather than relabeled as evidence for this changed
+worktree.
 
 ## Low-risk hardening evidence (2026-09-06, branch maintenance/low-risk-hardening)
 

@@ -33,6 +33,7 @@ all: $(LIBRARY)
 TEST_BINARY := $(BUILD_DIR)/tests/tfdb_tests
 TEST_CASES := $(wildcard tests/cases/*.inc)
 CONFORMANCE_WRITER := $(BUILD_DIR)/tests/tfdb_make_conformance_volume
+CONFORMANCE_CASE_WRITER := $(BUILD_DIR)/tests/tfdb_make_conformance_cases
 RUST_MANIFEST := rust/tfdb-reader/Cargo.toml
 RUST_TARGET_DIR := $(abspath $(BUILD_DIR)/rust)
 
@@ -44,6 +45,10 @@ test: $(TEST_BINARY)
 	$(TEST_BINARY)
 
 $(CONFORMANCE_WRITER): tests/make_conformance_volume.cpp $(LIBRARY)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(LIBRARY) $(LDFLAGS) -o $@
+
+$(CONFORMANCE_CASE_WRITER): tests/make_conformance_cases.cpp $(LIBRARY)
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(LIBRARY) $(LDFLAGS) -o $@
 
@@ -64,9 +69,10 @@ rust-build:
 rust-test:
 	CARGO_TARGET_DIR=$(RUST_TARGET_DIR) $(CARGO) test --manifest-path $(RUST_MANIFEST)
 
-conformance: tools $(CONFORMANCE_WRITER) rust-build
+conformance: tools $(CONFORMANCE_WRITER) $(CONFORMANCE_CASE_WRITER) rust-build
 	CPP_TOOL_DIR=$(abspath $(BUILD_DIR)/tools) \
 	CONFORMANCE_WRITER=$(abspath $(CONFORMANCE_WRITER)) \
+	CONFORMANCE_CASE_WRITER=$(abspath $(CONFORMANCE_CASE_WRITER)) \
 	RUST_BIN_DIR=$(RUST_TARGET_DIR)/debug bash tests/cross_language_conformance.sh
 
 build-system-test:
@@ -160,7 +166,8 @@ clean:
 # including tools, examples, and tests, still leaves no Status unchecked.
 cxx17-check:
 	@for source in $(LIB_SOURCES) tools/*.cpp examples/*.cpp \
-	    tests/test_main.cpp tests/make_conformance_volume.cpp; do \
+	    tests/test_main.cpp tests/make_conformance_volume.cpp \
+	    tests/make_conformance_cases.cpp; do \
 	  $(CXX) $(CPPFLAGS) -Itools -std=c++17 -Wall -Wextra -Wpedantic -Werror \
 	    -fsyntax-only "$$source" || exit 1; \
 	done

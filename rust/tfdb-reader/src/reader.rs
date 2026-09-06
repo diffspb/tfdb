@@ -167,7 +167,10 @@ impl Reader {
         for slot in 0..volume.partition_count {
             let base = partition_base(&volume, slot)?;
             let raw = read_vec(&file, base, PARTITION_HEADER_SIZE)?;
-            let header = match decode_partition_header(&raw) {
+            let header = match decode_partition_header(&raw).and_then(|header| {
+                validate_partition_header(&volume, slot, &header)?;
+                Ok(header)
+            }) {
                 Ok(header) => header,
                 Err(error) => {
                     let evidence =
@@ -187,7 +190,6 @@ impl Reader {
                     continue;
                 }
             };
-            validate_partition_header(&volume, slot, &header)?;
             if !generations.insert(header.generation) {
                 return Err(Error::corrupt("duplicate partition generation"));
             }
@@ -618,6 +620,8 @@ fn validate_partition_header(
             {
                 return Err(Error::corrupt("time-index region mismatch"));
             }
+        } else if !matches!(feature.kind, 1 | 3 | 4) && feature.region_length != 0 {
+            return Err(Error::unsupported("unknown feature reserves media space"));
         }
     }
     if !saw_time_index {

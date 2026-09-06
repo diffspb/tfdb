@@ -151,8 +151,10 @@ I/O it re-reads partition identity; detected reuse is an overwrite gap. A slow
 reader does not pin rotation. As with the C++ reader, another process that
 writes outside TFDB's single-writer protocol receives no guarantee.
 
-The current shared corpus checks byte-for-byte C++ regeneration, valid
+The current 18-case shared corpus checks byte-for-byte C++ regeneration, valid
 PackBits/raw partitions, both time domains, disordered and unsynchronized
 time, redundant-header recovery, invalid index rebuild, payload corruption,
-torn active tail, damaged partition metadata, unsupported format major, and
-truncation. Hardware durability and live-rotation soak remain separate gates.
+torn active tail, damaged partition metadata, unsupported format major,
+truncation, unknown feature handling, checked-arithmetic bounds, stale writer
+incarnations, and static snapshots across live rotation. A concurrent
+long-running rotation soak and hardware durability remain separate gates.

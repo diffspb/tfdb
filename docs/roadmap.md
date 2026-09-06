@@ -124,11 +124,13 @@ volumes can be inspected and dumped independently.
 
 Current state: the independent reader implements the listed decoding,
 recovery, scan/query, profile, and tool behavior. The deterministic mixed
-volume plus eight derived cases have matching C++/Rust outcomes. Before the
-freeze gate is signed, extend the manifest with independently reviewed
-feature-directory mutations, checked-arithmetic boundaries, writer-chain stale
-suffixes, and live-rotation traces; keep those as shared cases rather than
-Rust-only tests.
+volume plus 17 additional cases have matching C++/Rust outcomes. Ten complete
+images are committed with SHA-256 digests; the others are deterministic small
+mutations. Feature-directory semantics, checked-arithmetic boundaries, a
+writer-chain stale suffix, and three live-rotation snapshots are now shared
+cases rather than Rust-only tests. Their first run exposed and resolved the
+classification-order ambiguity recorded by ADR-035. Independent corpus review
+still remains part of the format-freeze sign-off.
 
 ### C. Native-Linux model, sanitizer, and fuzz qualification
 
@@ -327,7 +329,8 @@ overwriting the WSL2 reference artifact.
 Work that can begin without the hardware laboratory:
 
 1. maintain the BSD-2-Clause license and release/format compatibility policy;
-2. extend and independently review the shared negative corpus;
+2. independently review the shared negative corpus and extend it when review
+   or fuzzing exposes a specification gap;
 3. configure native-Linux CI, TSan, fuzzing, and long soak;
 4. define and anonymize the first replay corpus;
 5. design the power-cut harness and acceptance manifest without touching a

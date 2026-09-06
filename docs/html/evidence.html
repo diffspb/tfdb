@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="78c4a33ef48f936bf071c3fb0996e438c434db308f98439f3e41e1859ead5d55">
+  <meta name="tfdb-source-sha256" content="033ad0240d07f93954fcf8ec4ede4a69eb518768d447ca1a3bb9b95cad7e2fdf">
   <title>Reference verification evidence — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -48,21 +48,26 @@ reader has a third-party runtime/library dependency.</p>
 <li>The original 3015-line C++ test source is now a 260-line runner/support file
 plus six thematic scenario files of 320--514 lines. The same 76/76 tests pass.</li>
 <li>CMake/Ninja and Meson/Ninja each build the library, five C++ tools, two
-examples, the test runner, and deterministic conformance writer; each runs
+examples, the test runner, and deterministic conformance writers; each runs
 its unit and CLI smoke tests successfully. Both install to an isolated
 prefix, and standalone consumers build using only installed CMake package
 metadata or Meson-generated <code>tfdb.pc</code>, public headers, and <code>libtfdb.a</code>.</li>
-<li>The Rust crate runs 14 tests: four codec/CRC/profile unit tests, three
-decoder-robustness tests, two C++-written-volume conformance tests, and five
+<li>The Rust crate runs 17 tests: four codec/CRC/profile unit tests, three
+decoder-robustness tests, five shared-volume conformance tests, and five
 recovery/corruption tests. The decoder tests cover every truncation of each
 persistent structure, every single-bit mutation of CRC-protected corpus
 structures and the first record block, and 10,000 deterministic bounded
 arbitrary inputs without panics.</li>
-<li><code>make conformance</code> regenerates the 139264-byte shared volume byte-for-byte,
-checks its committed SHA-256
-<code>7d81004d396903b4f7194a5635f31e11fbf4664ca2fa23b38a5e5588e5bac254</code>,
-compares C++/Rust inspect, block-dump, and exact record-query output, and
-requires matching classifications for all nine manifest cases.</li>
+<li><code>make conformance</code> regenerates all ten committed shared images byte-for-byte,
+checks their committed SHA-256 manifest, compares C++/Rust block output for
+every valid image plus base-volume inspect and exact record-query output, and
+requires matching classifications for all 18 manifest cases. The cases add
+unknown feature semantics, feature/volume bounds, a two-crash stale-writer
+chain, and three live-rotation snapshots.</li>
+<li>The required long media-fuzz gate ran 5,000,000 derived-image iterations
+under ASan/UBSan as 20 independent shards of 250,000 iterations, base seed
+<code>202609062200</code> and stride <code>1000003</code>. It completed without a crash, hang,
+sanitizer report, undocumented status, or saved failing image.</li>
 <li>The valid corpus contains four blocks, eight FramedRecordV1 records, 714 raw
 bytes, one sealed PackBits partition, one footerless raw partition, two time
 domains, disordered time, unsynchronized time, and an anomaly flag.</li>
@@ -70,12 +75,16 @@ domains, disordered time, unsynchronized time, and an anomaly flag.</li>
 <code>cargo doc --no-deps</code> pass; the 15-page committed HTML documentation mirror
 is current and all local links/anchors validate.</li>
 </ul>
-<p>This closes the initial independent-reader implementation gate, not the format
-freeze. Shared feature-directory/bounds/stale-suffix/live-rotation cases,
-native-Linux fuzz/TSan/soak, trace replay, target power cuts/endurance, and a
-pilot remain open as listed in <a href="roadmap.html"><code>roadmap.md</code></a>. The historical
-benchmark digest and measurements below are preserved rather than relabeled as
-evidence for this changed worktree.</p>
+<p>The expanded corpus exposed one classification-order difference: Rust rejected
+an unknown optional feature before checking its overflowing media range, while
+C++ classified the range as structural damage and exposed a read-only header
+gap. ADR-035 fixes the validation order and both readers now agree.</p>
+<p>This closes the named initial corpus expansion, not independent review or the
+format freeze. Native-Linux fuzz/TSan/soak, trace replay, target power
+cuts/endurance, and a pilot remain open as listed in
+<a href="roadmap.html"><code>roadmap.md</code></a>. The historical benchmark digest and measurements
+below are preserved rather than relabeled as evidence for this changed
+worktree.</p>
 <h2 id="low-risk-hardening-evidence-2026-09-06-branch-maintenance-low-risk-hardening">Low-risk hardening evidence (2026-09-06, branch maintenance/low-risk-hardening)</h2>
 <p>Same host and toolchain as the section above, plus CMake 4.4.3, Meson 1.12.0,
 and Ninja 1.13.2 from a disposable virtualenv. Reproduced on this worktree:</p>
@@ -425,7 +434,7 @@ before freezing format v1.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">78c4a33ef48f936bf071c3fb0996e438c434db308f98439f3e41e1859ead5d55</span></p>
+        <p>Source SHA-256: <span class="source-hash">033ad0240d07f93954fcf8ec4ede4a69eb518768d447ca1a3bb9b95cad7e2fdf</span></p>
       </footer>
     </main>
   </div>

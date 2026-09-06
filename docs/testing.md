@@ -33,6 +33,15 @@ The Rust reader has module unit tests plus corpus and recovery integration
 tests. These are independent of C++ execution; the separate cross-language
 test then proves agreement against the same bytes.
 
+The shared manifest currently has 18 cases. Ten full images are committed and
+protected by `testdata/format-v1/SHA256SUMS`; the remaining eight compact
+single-byte/truncation mutations are derived deterministically by the
+cross-language harness. The committed negative and transition images cover
+unknown feature semantics, checked region/volume bounds, a two-crash stale
+writer-incarnation chain, and three snapshots across live partition reuse.
+Both readers must agree on contract-level results and on the physical block
+stream for every valid snapshot.
+
 ### Model and state-machine tests
 
 A small reference model stores accepted records by generation and physical

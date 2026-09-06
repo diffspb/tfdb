@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="83db513b706cddfda472c778eaa9e26e64e6d0d829fe772c23cee2cd0aa3ea40">
+  <meta name="tfdb-source-sha256" content="edfd0b0fa37b189bb7df2d20edf91fcb1f520de3fef02295c1b444446f1a26e7">
   <title>Architecture decision log — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -253,6 +253,12 @@ may be revisited before format v1 is declared stable.</p>
 <td>Add another codec before evidence; reuse ID 2</td>
 <td>Freezes a small independently tested set without preventing a later explicitly registered codec</td>
 </tr>
+<tr>
+<td>ADR-035</td>
+<td>Validate feature-region bounds before classifying an unknown optional region, and treat current-volume structural failure as a read-only header gap</td>
+<td>Return <code>unsupported</code> before checking the region; make validated-descriptor damage a global open error</td>
+<td>Malformed ranges cannot evade corruption reporting, and C++/Rust recovery selection agrees</td>
+</tr>
 </tbody>
 </table></div>
 <h2 id="deferred-extension-decisions">Deferred extension decisions</h2>
@@ -268,7 +274,7 @@ review, and compatibility decision before implementation:</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">83db513b706cddfda472c778eaa9e26e64e6d0d829fe772c23cee2cd0aa3ea40</span></p>
+        <p>Source SHA-256: <span class="source-hash">edfd0b0fa37b189bb7df2d20edf91fcb1f520de3fef02295c1b444446f1a26e7</span></p>
       </footer>
     </main>
   </div>

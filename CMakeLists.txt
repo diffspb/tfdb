@@ -93,6 +93,9 @@ if(TFDB_BUILD_TESTING AND BUILD_TESTING)
   add_executable(tfdb_make_conformance_volume tests/make_conformance_volume.cpp)
   target_link_libraries(tfdb_make_conformance_volume PRIVATE TFDB::tfdb)
 
+  add_executable(tfdb_make_conformance_cases tests/make_conformance_cases.cpp)
+  target_link_libraries(tfdb_make_conformance_cases PRIVATE TFDB::tfdb)
+
   if(TFDB_BUILD_TOOLS)
     find_program(TFDB_BASH_PROGRAM bash)
     if(NOT TFDB_BASH_PROGRAM)

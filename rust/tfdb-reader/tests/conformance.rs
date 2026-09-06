@@ -3,10 +3,45 @@
 
 use std::path::PathBuf;
 
-use tfdb_reader::{decode_framed_v1, Event, Reader, FRAMED_RECORD_V1_PROFILE_ID};
+use tfdb_reader::{decode_framed_v1, ErrorKind, Event, Reader, FRAMED_RECORD_V1_PROFILE_ID};
 
 fn corpus() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/format-v1/valid-mixed.tfdb")
+    corpus_case("valid-mixed")
+}
+
+fn corpus_case(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/format-v1")
+        .join(format!("{name}.tfdb"))
+}
+
+fn open_error(name: &str) -> ErrorKind {
+    match Reader::open(corpus_case(name)) {
+        Ok(_) => panic!("{name} unexpectedly opened"),
+        Err(error) => error.kind(),
+    }
+}
+
+fn homogeneous_blocks(name: &str) -> Vec<(u64, u32, u8)> {
+    let reader = Reader::open(corpus_case(name)).unwrap();
+    assert!(reader.initial_gaps().is_empty());
+    let mut result = Vec::new();
+    reader
+        .scan_blocks(|event| {
+            let Event::Data(block) = event else {
+                panic!("unexpected gap in {name}");
+            };
+            assert_eq!(block.data.len(), 200);
+            assert!(block.data.iter().all(|byte| *byte == block.data[0]));
+            result.push((
+                block.metadata.partition_generation,
+                block.metadata.block_sequence,
+                block.data[0],
+            ));
+            true
+        })
+        .unwrap();
+    result
 }
 
 #[test]
@@ -67,4 +102,50 @@ fn query_keeps_physical_order_and_filters_only_block_ranges() {
         )
         .unwrap();
     assert_eq!(sequences, vec![1, 2]);
+}
+
+#[test]
+fn shared_feature_and_bounds_cases_have_documented_classes() {
+    let optional = Reader::open(corpus_case("feature-optional-metadata")).unwrap();
+    assert_eq!(optional.partitions().len(), 2);
+    assert_eq!(
+        open_error("feature-required-unknown"),
+        ErrorKind::Unsupported
+    );
+    assert_eq!(
+        open_error("feature-optional-region"),
+        ErrorKind::Unsupported
+    );
+    assert_eq!(
+        open_error("bounds-volume-partition-size"),
+        ErrorKind::Corrupt
+    );
+
+    let overflow = Reader::open(corpus_case("bounds-feature-region-overflow")).unwrap();
+    assert_eq!(overflow.initial_gaps().len(), 1);
+    assert_eq!(overflow.partitions().len(), 1);
+}
+
+#[test]
+fn shared_stale_writer_chain_excludes_the_stale_suffix() {
+    assert_eq!(
+        homogeneous_blocks("stale-writer-chain"),
+        vec![(1, 0, b'A'), (1, 1, b'D')]
+    );
+}
+
+#[test]
+fn shared_live_rotation_snapshots_show_reuse_without_pinning() {
+    assert_eq!(
+        homogeneous_blocks("live-rotation-01-before-reuse"),
+        vec![(1, 0, b'A'), (2, 0, b'B')]
+    );
+    assert_eq!(
+        homogeneous_blocks("live-rotation-02-header-reused"),
+        vec![(2, 0, b'B')]
+    );
+    assert_eq!(
+        homogeneous_blocks("live-rotation-03-new-block"),
+        vec![(2, 0, b'B'), (3, 0, b'C')]
+    );
 }

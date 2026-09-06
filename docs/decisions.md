@@ -39,6 +39,7 @@ may be revisited before format v1 is declared stable.
 | ADR-032 | Qualify v1 with a standard-library-only independent Rust reader and shared byte corpus | Rust FFI to C++; duplicate writer first | Challenges the specification without sharing parser logic or adding a C++ runtime dependency |
 | ADR-033 | Reconstruct bad wall time only in a versioned export sidecar with uncertainty and immutable originals | Rewrite TFDB records; silently substitute arrival time | Exact recovery is sometimes impossible; provenance and later reprocessing remain available |
 | ADR-034 | The v1 portable codec set is `none:1` and `packbits:1`; LZ4 ID 2 stays reserved and unimplemented | Add another codec before evidence; reuse ID 2 | Freezes a small independently tested set without preventing a later explicitly registered codec |
+| ADR-035 | Validate feature-region bounds before classifying an unknown optional region, and treat current-volume structural failure as a read-only header gap | Return `unsupported` before checking the region; make validated-descriptor damage a global open error | Malformed ranges cannot evade corruption reporting, and C++/Rust recovery selection agrees |
 
 ## Deferred extension decisions
 

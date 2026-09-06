@@ -129,10 +129,11 @@ backpressure and gap handling, and target-hardware qualification boundaries.
 ## Status
 
 The C++14 candidate and an independent Rust reader are implemented. Their
-shared deterministic volume and current corruption/recovery cases agree, but
-format v1 is not frozen. Native-Linux model/fuzz/TSan/soak work, representative
-replay, target power-cut/endurance qualification, and a real pilot still have
-to pass. Continue with the ordered plan in [`docs/roadmap.md`](docs/roadmap.md).
+shared feature/bounds, stale-writer, rotation, and corruption/recovery cases
+agree, but format v1 is not frozen. Native-Linux model/fuzz/TSan/soak work,
+representative replay, target power-cut/endurance qualification, and a real
+pilot still have to pass. Continue with the ordered plan in
+[`docs/roadmap.md`](docs/roadmap.md).
 
 ## License
 

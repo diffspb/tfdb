@@ -76,6 +76,8 @@ if get_option('tests').disable_auto_if(tfdb_is_subproject).allowed()
   test('tfdb_unit', tfdb_tests)
   executable('tfdb_make_conformance_volume',
              'tests/make_conformance_volume.cpp', dependencies: tfdb_dep)
+  executable('tfdb_make_conformance_cases',
+             'tests/make_conformance_cases.cpp', dependencies: tfdb_dep)
 
   if get_option('tools').disable_auto_if(tfdb_is_subproject).allowed()
     bash = find_program('bash')

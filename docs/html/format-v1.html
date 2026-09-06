@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="0662e10e47857979b661396d4a8cbb5b3f58a94b682e26ede1e646dffe9a6c39">
+  <meta name="tfdb-source-sha256" content="d750a8a9ee5e5ad98b6917fe2f100ee8f3629741a62a65945e1eb5cc3b81e3e2">
   <title>TFDB media format v1 (candidate) — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -474,7 +474,11 @@ use <code>u16</code>. A larger value is corruption, not a truncating cast.</p>
 <p>An unknown required feature is unsupported. An unknown optional metadata-only
 feature can be ignored. A v1 reader rejects an unknown feature that reserves a
 media region because it cannot safely resume an active writer without knowing
-that region's write rules.</p>
+that region's write rules. Structural bounds are checked before applying that
+last semantic rule: a reserved-region range that overflows or extends outside
+the partition is corruption, not merely an unsupported feature. Default
+read-only open reports such damage in a current-volume partition header as a
+gap under the normal partition-header recovery rule.</p>
 <p>Partition-local options are immutable. New options take effect only after a
 new partition header is durable; no buffered block crosses that boundary.</p>
 <h2 id="6-block-frame">6. Block frame</h2>
@@ -971,7 +975,7 @@ guessed.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">0662e10e47857979b661396d4a8cbb5b3f58a94b682e26ede1e646dffe9a6c39</span></p>
+        <p>Source SHA-256: <span class="source-hash">d750a8a9ee5e5ad98b6917fe2f100ee8f3629741a62a65945e1eb5cc3b81e3e2</span></p>
       </footer>
     </main>
   </div>

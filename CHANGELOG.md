@@ -14,6 +14,8 @@ separate: format v1 remains a candidate until the qualification gates in
 - public compile-time/runtime library version API;
 - nonblocking writer-health snapshot for watchdogs;
 - reproducible sanitizer-backed media fuzzer with process sharding;
+- reproducible shared feature/bounds, stale-writer, and live-rotation corpus
+  images with SHA-256 protection;
 - BSD-2-Clause license and explicit project attribution.
 
 ### Changed
@@ -31,6 +33,8 @@ separate: format v1 remains a candidate until the qualification gates in
 
 - converted exceptions escaping the asynchronous writer thread into a stored
   background failure instead of terminating the process;
+- aligned Rust feature-region validation and damaged-header recovery with the
+  documented C++ contract;
 - published related writer-health fields with release/acquire ordering.
 
 No persistent-format bytes changed in these post-1.0 changes. Format v1 is not

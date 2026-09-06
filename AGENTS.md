@@ -86,10 +86,11 @@ repository contract.
 
 ## Current priority
 
-The initial independent Rust read-only implementation and shared deterministic
-corpus are present. Extend the shared negative corpus with feature/bounds,
-stale-writer-chain, and live-rotation cases, then move testing to native Linux
-for fuzzing, TSan, and the long soak while preparing representative trace
-replay. Do not add optional codecs or secondary indexes. Physical power-cut
-and endurance work begins only on an explicitly identified, expendable target
-device with an approved test procedure.
+The independent Rust reader and expanded shared corpus are present. The corpus
+now includes feature/bounds, stale-writer-chain, and live-rotation cases; keep
+it under independent review and add saved cases when fuzzing exposes a
+specification gap. Move testing to native Linux for fuzzing, TSan, and the long
+soak while preparing representative trace replay. Do not add optional codecs
+or secondary indexes. Physical power-cut and endurance work begins only on an
+explicitly identified, expendable target device with an approved test
+procedure.

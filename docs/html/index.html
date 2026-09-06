@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="91cbd83d9611eb0eb6a9c9afeb81e70301b773feda0f558b7783bcbca7e0d372">
+  <meta name="tfdb-source-sha256" content="fea14555bc1578a145a5333407d81b5db15cd37c62c6051a6eb1e0cb7104d31d">
   <title>TFDB — Telemetry Flash DB — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -145,10 +145,11 @@ safe provisioning, checked profile/time contracts, durability barriers,
 backpressure and gap handling, and target-hardware qualification boundaries.</p>
 <h2 id="status">Status</h2>
 <p>The C++14 candidate and an independent Rust reader are implemented. Their
-shared deterministic volume and current corruption/recovery cases agree, but
-format v1 is not frozen. Native-Linux model/fuzz/TSan/soak work, representative
-replay, target power-cut/endurance qualification, and a real pilot still have
-to pass. Continue with the ordered plan in <a href="roadmap.html"><code>docs/roadmap.md</code></a>.</p>
+shared feature/bounds, stale-writer, rotation, and corruption/recovery cases
+agree, but format v1 is not frozen. Native-Linux model/fuzz/TSan/soak work,
+representative replay, target power-cut/endurance qualification, and a real
+pilot still have to pass. Continue with the ordered plan in
+<a href="roadmap.html"><code>docs/roadmap.md</code></a>.</p>
 <h2 id="license">License</h2>
 <p>TFDB is distributed under the <a href="../../LICENSE">BSD 2-Clause License</a>.</p>
 <p>Copyright (c) 2026 Alexander Safronenko. Redistributions must retain the
@@ -158,7 +159,7 @@ distributions.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">91cbd83d9611eb0eb6a9c9afeb81e70301b773feda0f558b7783bcbca7e0d372</span></p>
+        <p>Source SHA-256: <span class="source-hash">fea14555bc1578a145a5333407d81b5db15cd37c62c6051a6eb1e0cb7104d31d</span></p>
       </footer>
     </main>
   </div>

@@ -8,3 +8,12 @@ torn-active-tail	valid-mixed;byte[77824]=0x58	valid:longest-prefix:3-blocks
 corrupt-partition-header	valid-mixed;byte[8192]=0x58	gap:current-volume-header-damage
 unsupported-major	valid-mixed;byte[8,4104]=0x02	unsupported:open-error
 truncated	valid-mixed;length=100000	corrupt:open-error
+feature-optional-metadata	feature-optional-metadata.tfdb	valid:unknown-metadata-only-feature-ignored:4-blocks
+feature-required-unknown	feature-required-unknown.tfdb	unsupported:unknown-required-feature
+feature-optional-region	feature-optional-region.tfdb	unsupported:unknown-feature-reserves-media
+bounds-feature-region-overflow	bounds-feature-region-overflow.tfdb	gap:feature-region-u64-overflow:1-readable-block
+bounds-volume-partition-size	bounds-volume-partition-size.tfdb	corrupt:volume-geometry-u64-overflow
+stale-writer-chain	stale-writer-chain.tfdb	valid:stale-crash-suffix-ignored:A-D
+live-rotation-01-before-reuse	live-rotation-01-before-reuse.tfdb	valid:generations-1-2:A-B
+live-rotation-02-header-reused	live-rotation-02-header-reused.tfdb	valid:generation-1-overwritten:B
+live-rotation-03-new-block	live-rotation-03-new-block.tfdb	valid:generations-2-3:B-C

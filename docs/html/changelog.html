@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="f47b6ca912fe5328b7b0696735221c83adbe64d5f355d37878d5efc060bb56ba">
+  <meta name="tfdb-source-sha256" content="60a2ea4b7141019a63c322ca074adbf67762159d075a5e2786dfa57ed3583405">
   <title>Changelog — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -49,6 +49,8 @@ C++/Rust conformance corpus;</li>
 <li>public compile-time/runtime library version API;</li>
 <li>nonblocking writer-health snapshot for watchdogs;</li>
 <li>reproducible sanitizer-backed media fuzzer with process sharding;</li>
+<li>reproducible shared feature/bounds, stale-writer, and live-rotation corpus
+images with SHA-256 protection;</li>
 <li>BSD-2-Clause license and explicit project attribution.</li>
 </ul>
 <h3 id="changed">Changed</h3>
@@ -66,6 +68,8 @@ durability contracts;</li>
 <ul>
 <li>converted exceptions escaping the asynchronous writer thread into a stored
 background failure instead of terminating the process;</li>
+<li>aligned Rust feature-region validation and damaged-header recovery with the
+documented C++ contract;</li>
 <li>published related writer-health fields with release/acquire ordering.</li>
 </ul>
 <p>No persistent-format bytes changed in these post-1.0 changes. Format v1 is not
@@ -77,7 +81,7 @@ blocks, time index, recovery/gap handling, tools, tests, and documentation.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">f47b6ca912fe5328b7b0696735221c83adbe64d5f355d37878d5efc060bb56ba</span></p>
+        <p>Source SHA-256: <span class="source-hash">60a2ea4b7141019a63c322ca074adbf67762159d075a5e2786dfa57ed3583405</span></p>
       </footer>
     </main>
   </div>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="f43ccacf9a10f775d294b7e059eca9995f2afc5652b35b0468cb381d0f0631b3">
+  <meta name="tfdb-source-sha256" content="d6f95659de5ae7b6691ed5b151c0ad1c0f347a4e8422b64fae693ac074f8bef1">
   <title>Verification and acceptance strategy — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -66,6 +66,14 @@ to those included scenario files.</p>
 <p>The Rust reader has module unit tests plus corpus and recovery integration
 tests. These are independent of C++ execution; the separate cross-language
 test then proves agreement against the same bytes.</p>
+<p>The shared manifest currently has 18 cases. Ten full images are committed and
+protected by <code>testdata/format-v1/SHA256SUMS</code>; the remaining eight compact
+single-byte/truncation mutations are derived deterministically by the
+cross-language harness. The committed negative and transition images cover
+unknown feature semantics, checked region/volume bounds, a two-crash stale
+writer-incarnation chain, and three snapshots across live partition reuse.
+Both readers must agree on contract-level results and on the physical block
+stream for every valid snapshot.</p>
 <h3 id="model-and-state-machine-tests">Model and state-machine tests</h3>
 <p>A small reference model stores accepted records by generation and physical
 order. The current deterministic crash model covers append, checkpoint, crash,
@@ -328,7 +336,7 @@ characterize its internal write amplification.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">f43ccacf9a10f775d294b7e059eca9995f2afc5652b35b0468cb381d0f0631b3</span></p>
+        <p>Source SHA-256: <span class="source-hash">d6f95659de5ae7b6691ed5b151c0ad1c0f347a4e8422b64fae693ac074f8bef1</span></p>
       </footer>
     </main>
   </div>

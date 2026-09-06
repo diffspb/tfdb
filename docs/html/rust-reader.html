@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="4b45b96ee69ec0be9415179946d6245a94a5472ec42817643d3c59eeb505a256">
+  <meta name="tfdb-source-sha256" content="f3b93f3d0b5e68c07db9334d62712f243ba8b51638e78cfe94ba065b2baace49">
   <title>Independent Rust reader — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -155,15 +155,17 @@ decoded block bytes, matching the C++ tool.</p>
 I/O it re-reads partition identity; detected reuse is an overwrite gap. A slow
 reader does not pin rotation. As with the C++ reader, another process that
 writes outside TFDB's single-writer protocol receives no guarantee.</p>
-<p>The current shared corpus checks byte-for-byte C++ regeneration, valid
+<p>The current 18-case shared corpus checks byte-for-byte C++ regeneration, valid
 PackBits/raw partitions, both time domains, disordered and unsynchronized
 time, redundant-header recovery, invalid index rebuild, payload corruption,
-torn active tail, damaged partition metadata, unsupported format major, and
-truncation. Hardware durability and live-rotation soak remain separate gates.</p>
+torn active tail, damaged partition metadata, unsupported format major,
+truncation, unknown feature handling, checked-arithmetic bounds, stale writer
+incarnations, and static snapshots across live rotation. A concurrent
+long-running rotation soak and hardware durability remain separate gates.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">4b45b96ee69ec0be9415179946d6245a94a5472ec42817643d3c59eeb505a256</span></p>
+        <p>Source SHA-256: <span class="source-hash">f3b93f3d0b5e68c07db9334d62712f243ba8b51638e78cfe94ba065b2baace49</span></p>
       </footer>
     </main>
   </div>

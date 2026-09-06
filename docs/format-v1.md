@@ -203,7 +203,11 @@ use `u16`. A larger value is corruption, not a truncating cast.
 An unknown required feature is unsupported. An unknown optional metadata-only
 feature can be ignored. A v1 reader rejects an unknown feature that reserves a
 media region because it cannot safely resume an active writer without knowing
-that region's write rules.
+that region's write rules. Structural bounds are checked before applying that
+last semantic rule: a reserved-region range that overflows or extends outside
+the partition is corruption, not merely an unsupported feature. Default
+read-only open reports such damage in a current-volume partition header as a
+gap under the normal partition-header recovery rule.
 
 Partition-local options are immutable. New options take effect only after a
 new partition header is durable; no buffered block crosses that boundary.
