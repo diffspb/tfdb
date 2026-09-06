@@ -1,6 +1,11 @@
-option('tools', type: 'boolean', value: true,
+# 'auto' means: enabled when TFDB is the top-level project, disabled when it
+# is consumed as a Meson subproject. Force either way with -Dtools=enabled
+# or -Dtools=disabled.
+option('tools', type: 'feature', value: 'auto',
        description: 'Build TFDB command-line tools')
-option('examples', type: 'boolean', value: true,
+option('examples', type: 'feature', value: 'auto',
        description: 'Build TFDB examples')
-option('tests', type: 'boolean', value: true,
+option('tests', type: 'feature', value: 'auto',
        description: 'Build TFDB tests')
+option('install', type: 'feature', value: 'auto',
+       description: 'Generate TFDB install and pkg-config rules')

@@ -6,6 +6,11 @@ project(
   meson_version: '>=1.0.0',
 )
 
+# A parent project consuming TFDB as a subproject wants the library, not its
+# tools, examples, or install rules.
+tfdb_is_subproject = meson.is_subproject()
+tfdb_install = get_option('install').disable_auto_if(tfdb_is_subproject).allowed()
+
 threads = dependency('threads')
 tfdb_public_inc = include_directories('include')
 tfdb_private_inc = include_directories('src')
@@ -26,7 +31,9 @@ tfdb_library = static_library(
   tfdb_sources,
   include_directories: [tfdb_public_inc, tfdb_private_inc],
   dependencies: threads,
-  install: true,
+  install: tfdb_install,
+  # b_staticpic defaults to true, so libtfdb.a can already be linked into a
+  # shared object without an extra option here.
 )
 
 tfdb_dep = declare_dependency(
@@ -36,29 +43,31 @@ tfdb_dep = declare_dependency(
 )
 meson.override_dependency('tfdb', tfdb_dep)
 
-install_subdir('include/tfdb', install_dir: get_option('includedir'))
+if tfdb_install
+  install_subdir('include/tfdb', install_dir: get_option('includedir'))
+endif
 
 tool_targets = []
-if get_option('tools')
+if get_option('tools').disable_auto_if(tfdb_is_subproject).allowed()
   foreach tool : ['format', 'inspect', 'verify', 'dump', 'loadgen']
     tool_targets += executable(
       'tfdb_' + tool,
       'tools/tfdb_' + tool + '.cpp',
       include_directories: [include_directories('tools'), tfdb_private_inc],
       dependencies: tfdb_dep,
-      install: true,
+      install: tfdb_install,
     )
   endforeach
 endif
 
-if get_option('examples')
+if get_option('examples').disable_auto_if(tfdb_is_subproject).allowed()
   executable('tfdb_example_quickstart', 'examples/quickstart.cpp',
              dependencies: tfdb_dep)
   executable('tfdb_example_async_writer', 'examples/async_writer.cpp',
              dependencies: tfdb_dep)
 endif
 
-if get_option('tests')
+if get_option('tests').disable_auto_if(tfdb_is_subproject).allowed()
   tfdb_tests = executable('tfdb_tests', 'tests/test_main.cpp',
                           include_directories: tfdb_private_inc,
                           dependencies: tfdb_dep)
@@ -66,7 +75,7 @@ if get_option('tests')
   executable('tfdb_make_conformance_volume',
              'tests/make_conformance_volume.cpp', dependencies: tfdb_dep)
 
-  if get_option('tools')
+  if get_option('tools').disable_auto_if(tfdb_is_subproject).allowed()
     bash = find_program('bash')
     tool_environment = environment()
     tool_environment.set('TOOL_DIR', meson.current_build_dir())
@@ -79,11 +88,13 @@ if get_option('tests')
   endif
 endif
 
-pkg = import('pkgconfig')
-pkg.generate(
-  tfdb_library,
-  name: 'TFDB',
-  filebase: 'tfdb',
-  description: 'Telemetry Flash DB C++14 runtime library',
-  version: meson.project_version(),
-)
+if tfdb_install
+  pkg = import('pkgconfig')
+  pkg.generate(
+    tfdb_library,
+    name: 'TFDB',
+    filebase: 'tfdb',
+    description: 'Telemetry Flash DB C++14 runtime library',
+    version: meson.project_version(),
+  )
+endif
