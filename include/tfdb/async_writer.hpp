@@ -78,6 +78,8 @@ class AsyncWriter {
   };
 
   void run();
+  void run_loop();
+  void fail_background(const Status& status);
   Status submit_impl(ByteView encoded_record, std::int64_t index_time_ns,
                      std::uint32_t record_flags,
                      const AppendContract* expected);

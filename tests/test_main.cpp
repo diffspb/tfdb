@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <random>
+#include <stdexcept>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -142,6 +143,28 @@ class RepeatedByteCodec final : public tfdb::CompressionCodec {
                                  "invalid repeated-byte block");
     output->assign(expected_size, input.data()[0]);
     return tfdb::Status::Ok();
+  }
+};
+
+// Models an exception escaping application-supplied code on the background
+// writer thread, which before the guard in AsyncWriter::run() reached the
+// thread entry point and called std::terminate.
+class ThrowingCodec final : public tfdb::CompressionCodec {
+ public:
+  tfdb::CompressionId id() const override {
+    return static_cast<tfdb::CompressionId>(101);
+  }
+  std::uint16_t version() const override { return 3; }
+  std::size_t max_compressed_size(std::size_t input_size) const override {
+    return input_size;
+  }
+  tfdb::Status compress(tfdb::ByteView,
+                        std::vector<std::uint8_t>*) const override {
+    throw std::runtime_error("injected codec exception");
+  }
+  tfdb::Status decompress(tfdb::ByteView, std::size_t,
+                          std::vector<std::uint8_t>*) const override {
+    throw std::runtime_error("injected codec exception");
   }
 };
 

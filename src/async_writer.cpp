@@ -1,6 +1,8 @@
 #include "tfdb/async_writer.hpp"
 
 #include <algorithm>
+#include <exception>
+#include <string>
 
 namespace tfdb {
 namespace {
@@ -186,7 +188,43 @@ AsyncWriterMetrics AsyncWriter::metrics() const {
   return result;
 }
 
+void AsyncWriter::fail_background(const Status& status) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  ++metrics_.background_errors;
+  background_status_ = status;
+  running_ = false;
+  stopping_ = true;
+  queue_.clear();
+  queued_bytes_ = 0;
+  barrier_condition_.notify_all();
+}
+
 void AsyncWriter::run() {
+  // RingStore reports expected failures as Status, but allocation and any
+  // application-supplied codec still obey normal C++ semantics. An escaping
+  // exception here would reach the thread entry point and call std::terminate,
+  // killing the whole process instead of faulting one writer. Convert it into
+  // the same background failure a returned error produces.
+  try {
+    run_loop();
+  } catch (const std::exception& error) {
+    Status status(StatusCode::internal_error, "async exception");
+    try {
+      status = Status(StatusCode::internal_error,
+                      std::string("async writer thread exception: ") +
+                          error.what());
+    } catch (...) {
+      // Building the detailed message can itself fail under memory pressure,
+      // which is the case most likely to have brought us here. The short
+      // literal above fits every standard small-string buffer.
+    }
+    fail_background(status);
+  } catch (...) {
+    fail_background(Status(StatusCode::internal_error, "async exception"));
+  }
+}
+
+void AsyncWriter::run_loop() {
   constexpr std::uint64_t kNanosecondsPerMillisecond = 1000000;
   const std::uint64_t interval_ns =
       static_cast<std::uint64_t>(options_.checkpoint_interval.count()) *

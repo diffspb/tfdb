@@ -511,3 +511,39 @@ TEST(file_backend_integration_reopens_data) {
   REQUIRE_EQ(blocks[0][0], static_cast<std::uint8_t>('f'));
   ::unlink(path.c_str());
 }
+
+TEST(async_thread_exception_is_reported_not_fatal) {
+  // An exception escaping the writer thread used to terminate the process.
+  // It must instead become an ordinary background failure that stop(),
+  // submit(), and checkpoint() all report.
+  Fixture fixture(64u * 1024u, 512, 512);
+  const std::shared_ptr<const tfdb::CompressionCodec> codec(new ThrowingCodec());
+  tfdb::OpenOptions writable;
+  writable.writable = true;
+  writable.next_partition.compression = codec->id();
+  writable.next_partition.compression_version = codec->version();
+  writable.compression_codecs.push_back(codec);
+  REQUIRE_OK(tfdb::RingStore::open(fixture.storage, writable, &fixture.store));
+
+  tfdb::AsyncWriterOptions options;
+  options.checkpoint_interval = std::chrono::milliseconds(10);
+  tfdb::AsyncWriter writer(*fixture.store, options);
+  REQUIRE_OK(writer.start());
+  const std::vector<std::uint8_t> payload(400, 0xcd);
+  REQUIRE_OK(writer.submit(tfdb::ByteView(payload), 1));
+
+  // The periodic checkpoint publishes the block, which invokes the codec.
+  const tfdb::Status stopped = writer.stop();
+  REQUIRE(stopped.code() == tfdb::StatusCode::internal_error);
+  REQUIRE(stopped.message().find("exception") != std::string::npos);
+  REQUIRE_EQ(writer.metrics().background_errors, 1u);
+  REQUIRE_EQ(writer.queued_records(), 0u);
+
+  // The original diagnostic keeps priority over any later call.
+  const tfdb::Status resubmitted =
+      writer.submit(tfdb::ByteView(payload), 2);
+  REQUIRE(resubmitted.code() == stopped.code());
+  REQUIRE(resubmitted.message() == stopped.message());
+  REQUIRE(writer.checkpoint().message() == stopped.message());
+  REQUIRE(writer.start().message() == stopped.message());
+}
