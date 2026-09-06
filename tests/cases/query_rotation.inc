@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 TEST(disordered_time_index_has_no_false_negative) {
   Fixture fixture(128u * 1024u, 70, 512);
   fixture.partition.record_format_id = tfdb::kFramedRecordV1ProfileId;

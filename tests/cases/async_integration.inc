@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 TEST(async_checkpoint_is_a_durable_fifo_barrier) {
   Fixture fixture;
   fixture.open();

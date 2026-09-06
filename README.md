@@ -1,6 +1,8 @@
 # TFDB — Telemetry Flash DB
 
-Current release: **1.0.0** (canonical value: [`VERSION`](VERSION)).
+Current development version: **1.1.0** (canonical value: [`VERSION`](VERSION)).
+The latest immutable release tag remains **v1.0.0** until the 1.1.0 release
+gates are completed.
 
 TFDB (Telemetry Flash DB) is a small C++14 library for long-lived,
 flash-conscious telemetry and log storage on Linux. A store is a fixed-size
@@ -78,6 +80,8 @@ with `python3 docs/build_html.py --check`. Regeneration requires
 exactly `markdown-it-py 3.0.0`; the generated pages have no runtime or network
 dependency.
 
+- [`CHANGELOG.md`](CHANGELOG.md): source/API release history and the explicit
+  distinction from the persistent-format lifecycle;
 - [`docs/roadmap.md`](docs/roadmap.md): post-1.0 priorities, format-freeze
   gates, native-Linux/hardware work, and the portable project handoff;
 - [`docs/architecture.md`](docs/architecture.md): layers, lifecycle, durability,
@@ -129,3 +133,12 @@ shared deterministic volume and current corruption/recovery cases agree, but
 format v1 is not frozen. Native-Linux model/fuzz/TSan/soak work, representative
 replay, target power-cut/endurance qualification, and a real pilot still have
 to pass. Continue with the ordered plan in [`docs/roadmap.md`](docs/roadmap.md).
+
+## License
+
+TFDB is distributed under the [BSD 2-Clause License](LICENSE).
+
+Copyright (c) 2026 Alexander Safronenko. Redistributions must retain the
+copyright notice, license conditions, and disclaimer as specified by the
+license, including in documentation or other materials accompanying binary
+distributions.

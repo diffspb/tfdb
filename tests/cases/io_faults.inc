@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 TEST(hard_write_error_faults_writer_until_reopen) {
   Fixture fixture;
   fixture.open();

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 use crate::{crc32c, Error, Result};
 
 pub const VOLUME_HEADER_SIZE: usize = 256;

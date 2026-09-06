@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 TEST(framed_record_crc_covers_metadata_and_signed_time) {
   std::vector<std::uint8_t> encoded;
   const char payload[] = {'l', 'o', 'g'};

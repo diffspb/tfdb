@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="e9f007a7043990e2026fe36242735e7805951d9b8de44cf584665f5a797bcd31">
+  <meta name="tfdb-source-sha256" content="78c4a33ef48f936bf071c3fb0996e438c434db308f98439f3e41e1859ead5d55">
   <title>Reference verification evidence — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -18,6 +18,7 @@
       <p class="sidebar-title">Contents</p>
       <ul>
         <li><a href="index.html">Overview</a></li>
+<li><a href="changelog.html">Changelog</a></li>
 <li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
@@ -66,7 +67,7 @@ requires matching classifications for all nine manifest cases.</li>
 bytes, one sealed PackBits partition, one footerless raw partition, two time
 domains, disordered time, unsynchronized time, and an anomaly flag.</li>
 <li><code>cargo fmt -- --check</code>, <code>cargo check --all-targets</code>, and
-<code>cargo doc --no-deps</code> pass; the 14-page committed HTML documentation mirror
+<code>cargo doc --no-deps</code> pass; the 15-page committed HTML documentation mirror
 is current and all local links/anchors validate.</li>
 </ul>
 <p>This closes the initial independent-reader implementation gate, not the format
@@ -113,7 +114,7 @@ only the <code>tfdb</code> target, no <code>BUILD_TESTING</code> option, and no 
 <li>the shared conformance volume still regenerates byte-for-byte to SHA-256
 <code>7d81004d396903b4f7194a5635f31e11fbf4664ca2fa23b38a5e5588e5bac254</code> after the
 CRC32C refactor, which is the evidence that no encoded byte changed;</li>
-<li><code>python3 docs/build_html.py --check</code> validates all 14 pages.</li>
+<li><code>python3 docs/build_html.py --check</code> validates all 15 pages.</li>
 </ul>
 <p>Two measurements motivated changes rather than recording them:</p>
 <ul>
@@ -424,7 +425,7 @@ before freezing format v1.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">e9f007a7043990e2026fe36242735e7805951d9b8de44cf584665f5a797bcd31</span></p>
+        <p>Source SHA-256: <span class="source-hash">78c4a33ef48f936bf071c3fb0996e438c434db308f98439f3e41e1859ead5d55</span></p>
       </footer>
     </main>
   </div>

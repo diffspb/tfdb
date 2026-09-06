@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Seek, SeekFrom};

@@ -32,7 +32,7 @@ reader has a third-party runtime/library dependency.
   bytes, one sealed PackBits partition, one footerless raw partition, two time
   domains, disordered time, unsynchronized time, and an anomaly flag.
 - `cargo fmt -- --check`, `cargo check --all-targets`, and
-  `cargo doc --no-deps` pass; the 14-page committed HTML documentation mirror
+  `cargo doc --no-deps` pass; the 15-page committed HTML documentation mirror
   is current and all local links/anchors validate.
 
 This closes the initial independent-reader implementation gate, not the format
@@ -81,7 +81,7 @@ and Ninja 1.13.2 from a disposable virtualenv. Reproduced on this worktree:
 - the shared conformance volume still regenerates byte-for-byte to SHA-256
   `7d81004d396903b4f7194a5635f31e11fbf4664ca2fa23b38a5e5588e5bac254` after the
   CRC32C refactor, which is the evidence that no encoded byte changed;
-- `python3 docs/build_html.py --check` validates all 14 pages.
+- `python3 docs/build_html.py --check` validates all 15 pages.
 
 Two measurements motivated changes rather than recording them:
 

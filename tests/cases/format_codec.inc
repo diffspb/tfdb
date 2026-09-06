@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 TEST(incremental_crc32c_matches_one_shot_and_zeroed_field) {
   const std::string text = "123456789";
   REQUIRE_EQ(tfdb::internal::crc32c(

@@ -32,6 +32,7 @@ OUTPUT_DIR = DOCS_DIR / "html"
 
 PAGES = (
     (ROOT / "README.md", "index.html", "Overview"),
+    (ROOT / "CHANGELOG.md", "changelog.html", "Changelog"),
     (DOCS_DIR / "roadmap.md", "roadmap.html", "Roadmap and handoff"),
     (DOCS_DIR / "tutorial.md", "tutorial.html", "Tutorial"),
     (DOCS_DIR / "api.md", "api.html", "C++ API"),
@@ -278,7 +279,7 @@ def page_html(source_path: Path, filename: str, label: str) -> str:
     source = source_path.read_text(encoding="utf-8")
     title, body = render_markdown(source, source_path)
     digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
-    source_link = "../../README.md" if source_path == ROOT / "README.md" else f"../{source_path.name}"
+    source_link = os.path.relpath(source_path, OUTPUT_DIR).replace(os.sep, "/")
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -394,7 +395,8 @@ def dependency_errors() -> list[str]:
 
 def source_inventory_errors() -> list[str]:
     declared = {source.resolve() for source, _, _ in PAGES}
-    discovered = {ROOT / "README.md", *DOCS_DIR.glob("*.md")}
+    discovered = {ROOT / "README.md", ROOT / "CHANGELOG.md",
+                  *DOCS_DIR.glob("*.md")}
     discovered = {source.resolve() for source in discovered}
     errors = [
         f"documentation source has no HTML mapping: {source.relative_to(ROOT)}"

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 #ifndef TFDB_RECORD_PROFILE_HPP
 #define TFDB_RECORD_PROFILE_HPP
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 TEST(append_checkpoint_exact_io_and_visibility) {
   Fixture fixture;
   fixture.open();

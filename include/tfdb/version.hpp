@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 #ifndef TFDB_VERSION_HPP
 #define TFDB_VERSION_HPP
 
@@ -5,10 +8,10 @@
 // docs/format-v1.md and docs/roadmap.md for the two separate version axes.
 // A library release may advance without changing the persistent format.
 #define TFDB_VERSION_MAJOR 1
-#define TFDB_VERSION_MINOR 0
+#define TFDB_VERSION_MINOR 1
 #define TFDB_VERSION_PATCH 0
 
-#define TFDB_VERSION_STRING "1.0.0"
+#define TFDB_VERSION_STRING "1.1.0"
 
 // Ordered value for conditional compilation, e.g.
 //   #if TFDB_VERSION_NUMBER >= 10100

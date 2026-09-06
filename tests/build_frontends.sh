@@ -35,4 +35,9 @@ PKG_CONFIG_PATH="$pkgconfig_dir" \
   "$meson_program" compile -C "$work/meson-consumer"
 "$work/meson-consumer/tfdb_consumer"
 
+for prefix in "$work/cmake-prefix" "$work/meson-prefix"; do
+  cmp "$root/LICENSE" "$prefix/share/doc/tfdb/LICENSE"
+  cmp "$root/CHANGELOG.md" "$prefix/share/doc/tfdb/CHANGELOG.md"
+done
+
 printf '%s\n' 'CMake/Meson build, install, and consumer smoke: PASS'

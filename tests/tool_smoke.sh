@@ -100,7 +100,7 @@ grep -q 'applies to --device only' "$work_dir/yes-nodevice.err"
 grep -q '^formatted ' "$work_dir/device-yes.out"
 "$tool_dir/tfdb_verify" "$device_store" >/dev/null
 
-# The library release is declared in four places that can drift apart. Keep
+# The library release is declared in five places that can drift apart. Keep
 # them consistent here, where every build frontend already runs this script.
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 version_file=$(tr -d '[:space:]' < "$repo_root/VERSION")
@@ -116,9 +116,12 @@ cmake_version=$(sed -n 's/^project(TFDB VERSION \([0-9.]*\).*$/\1/p' \
   "$repo_root/CMakeLists.txt")
 meson_version=$(sed -n "s/^  version: '\([0-9.]*\)',$/\1/p" \
   "$repo_root/meson.build")
+cargo_version=$(sed -n 's/^version = "\([0-9.]*\)"$/\1/p' \
+  "$repo_root/rust/tfdb-reader/Cargo.toml")
 
 test -n "$version_file"
 test "$header_version" = "$version_file"
 test "$header_major.$header_minor.$header_patch" = "$version_file"
 test "$cmake_version" = "$version_file"
 test "$meson_version" = "$version_file"
+test "$cargo_version" = "$version_file"

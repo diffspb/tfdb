@@ -36,6 +36,10 @@ byte-for-byte by the C++ public API; the cross-language test compares both
 implementations over its valid and derived corruption/recovery cases. See
 [`rust-reader.md`](rust-reader.md) and [`evidence.md`](evidence.md).
 
+The current post-baseline development version is 1.1.0 and is distributed
+under the BSD-2-Clause license. This does not move or rewrite the immutable
+`v1.0.0` tag, declare a 1.1.0 release, or freeze the persistent format.
+
 ### Two version axes
 
 Do not confuse the library release with the persistent-format lifecycle:
@@ -77,10 +81,10 @@ gate in section 5.
 
 Complete the inexpensive repository work first:
 
-1. Choose and add a `LICENSE`; this is an owner/legal decision and must not be
-   invented by an agent.
-2. Add `CHANGELOG.md` and document the distinction between source/API
-   compatibility and on-media compatibility.
+1. **Complete:** BSD-2-Clause is the project license and retains Alexander
+   Safronenko's copyright notice in source and binary distributions.
+2. **Complete:** `CHANGELOG.md` records source/API releases separately from the
+   on-media format lifecycle.
 3. Add install/package support suitable for consumers while preserving the
    dependency-free runtime. A `DESTDIR`-aware Make target and optional
    pkg-config/CMake package metadata are sufficient; another build system need
@@ -322,7 +326,7 @@ overwriting the WSL2 reference artifact.
 
 Work that can begin without the hardware laboratory:
 
-1. decide the license and compatibility policy;
+1. maintain the BSD-2-Clause license and release/format compatibility policy;
 2. extend and independently review the shared negative corpus;
 3. configure native-Linux CI, TSan, fuzzing, and long soak;
 4. define and anonymize the first replay corpus;

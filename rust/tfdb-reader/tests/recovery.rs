@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 use std::fs::{self, OpenOptions};
 use std::os::unix::fs::FileExt;
 use std::path::PathBuf;

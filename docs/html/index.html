@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="37ab557ef9588feb98c186968414d8565ed41bcf4a598d037612c56b60ed9e91">
+  <meta name="tfdb-source-sha256" content="91cbd83d9611eb0eb6a9c9afeb81e70301b773feda0f558b7783bcbca7e0d372">
   <title>TFDB — Telemetry Flash DB — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -18,6 +18,7 @@
       <p class="sidebar-title">Contents</p>
       <ul>
         <li><a href="index.html" aria-current="page">Overview</a></li>
+<li><a href="changelog.html">Changelog</a></li>
 <li><a href="roadmap.html">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
@@ -36,7 +37,9 @@
     <main id="content">
       <p class="mirror-note">Offline HTML mirror of <a href="../../README.md">README.md</a>. The Markdown file is canonical.</p>
       <h1 id="tfdb-telemetry-flash-db">TFDB — Telemetry Flash DB</h1>
-<p>Current release: <strong>1.0.0</strong> (canonical value: <a href="../../VERSION"><code>VERSION</code></a>).</p>
+<p>Current development version: <strong>1.1.0</strong> (canonical value: <a href="../../VERSION"><code>VERSION</code></a>).
+The latest immutable release tag remains <strong>v1.0.0</strong> until the 1.1.0 release
+gates are completed.</p>
 <p>TFDB (Telemetry Flash DB) is a small C++14 library for long-lived,
 flash-conscious telemetry and log storage on Linux. A store is a fixed-size
 file or block device split into a ring of independently recoverable partitions.
@@ -100,6 +103,8 @@ with <code>python3 docs/build_html.py --check</code>. Regeneration requires
 exactly <code>markdown-it-py 3.0.0</code>; the generated pages have no runtime or network
 dependency.</p>
 <ul>
+<li><a href="changelog.html"><code>CHANGELOG.md</code></a>: source/API release history and the explicit
+distinction from the persistent-format lifecycle;</li>
 <li><a href="roadmap.html"><code>docs/roadmap.md</code></a>: post-1.0 priorities, format-freeze
 gates, native-Linux/hardware work, and the portable project handoff;</li>
 <li><a href="architecture.html"><code>docs/architecture.md</code></a>: layers, lifecycle, durability,
@@ -144,10 +149,16 @@ shared deterministic volume and current corruption/recovery cases agree, but
 format v1 is not frozen. Native-Linux model/fuzz/TSan/soak work, representative
 replay, target power-cut/endurance qualification, and a real pilot still have
 to pass. Continue with the ordered plan in <a href="roadmap.html"><code>docs/roadmap.md</code></a>.</p>
+<h2 id="license">License</h2>
+<p>TFDB is distributed under the <a href="../../LICENSE">BSD 2-Clause License</a>.</p>
+<p>Copyright (c) 2026 Alexander Safronenko. Redistributions must retain the
+copyright notice, license conditions, and disclaimer as specified by the
+license, including in documentation or other materials accompanying binary
+distributions.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">37ab557ef9588feb98c186968414d8565ed41bcf4a598d037612c56b60ed9e91</span></p>
+        <p>Source SHA-256: <span class="source-hash">91cbd83d9611eb0eb6a9c9afeb81e70301b773feda0f558b7783bcbca7e0d372</span></p>
       </footer>
     </main>
   </div>

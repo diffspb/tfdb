@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="tfdb-source-sha256" content="f47b6ca912fe5328b7b0696735221c83adbe64d5f355d37878d5efc060bb56ba">
+  <title>Changelog — TFDB</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="index.html">TFDB documentation</a>
+    <span class="site-status">C++14 software candidate</span>
+  </header>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Documentation">
+      <p class="sidebar-title">Contents</p>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+<li><a href="changelog.html" aria-current="page">Changelog</a></li>
+<li><a href="roadmap.html">Roadmap and handoff</a></li>
+<li><a href="tutorial.html">Tutorial</a></li>
+<li><a href="api.html">C++ API</a></li>
+<li><a href="rust-reader.html">Rust reader</a></li>
+<li><a href="architecture.html">Architecture</a></li>
+<li><a href="format-v1.html">Media format v1</a></li>
+<li><a href="decisions.html">Decisions</a></li>
+<li><a href="research.html">Research</a></li>
+<li><a href="testing.html">Verification</a></li>
+<li><a href="sizing.html">Sizing and endurance</a></li>
+<li><a href="evidence.html">Evidence</a></li>
+<li><a href="logs.html">Application logs</a></li>
+<li><a href="time-reconstruction.html">Time reconstruction</a></li>
+      </ul>
+    </nav>
+    <main id="content">
+      <p class="mirror-note">Offline HTML mirror of <a href="../../CHANGELOG.md">CHANGELOG.md</a>. The Markdown file is canonical.</p>
+      <h1 id="changelog">Changelog</h1>
+<p>This file records source/API releases. The persistent-format lifecycle is
+separate: format v1 remains a candidate until the qualification gates in
+<a href="roadmap.html"><code>docs/roadmap.md</code></a> pass.</p>
+<h2 id="unreleased-target-1-1-0">Unreleased (target 1.1.0)</h2>
+<h3 id="added">Added</h3>
+<ul>
+<li>independent dependency-free Rust reader, read-only tools, and shared
+C++/Rust conformance corpus;</li>
+<li>CMake and Meson build, install, package, and external-consumer support;</li>
+<li>public compile-time/runtime library version API;</li>
+<li>nonblocking writer-health snapshot for watchdogs;</li>
+<li>reproducible sanitizer-backed media fuzzer with process sharding;</li>
+<li>BSD-2-Clause license and explicit project attribution.</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>split the C++ test suite into thematic scenario files;</li>
+<li>made ignored <code>Status</code> results diagnosable under C++17 with <code>[[nodiscard]]</code>;</li>
+<li>required <code>--device --yes</code> for block-device formatting and added a
+best-effort mounted-path refusal;</li>
+<li>documented reader freshness, early-boot entropy, async ownership, and
+durability contracts;</li>
+<li>deprecated <code>emergency_checkpoint()</code> and the ignored query CRC option;</li>
+<li>replaced checksum-time structure/record copies with incremental CRC32C.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>converted exceptions escaping the asynchronous writer thread into a stored
+background failure instead of terminating the process;</li>
+<li>published related writer-health fields with release/acquire ordering.</li>
+</ul>
+<p>No persistent-format bytes changed in these post-1.0 changes. Format v1 is not
+frozen.</p>
+<h2 id="1-0-0-2026-09-02">1.0.0 - 2026-09-02</h2>
+<p>Initial immutable C++14 source release: synchronous ring store, bounded async
+writer, file/block-device and deterministic fault backends, raw and PackBits
+blocks, time index, recovery/gap handling, tools, tests, and documentation.</p>
+
+      <footer class="page-footer">
+        <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
+        <p>Source SHA-256: <span class="source-hash">f47b6ca912fe5328b7b0696735221c83adbe64d5f355d37878d5efc060bb56ba</span></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

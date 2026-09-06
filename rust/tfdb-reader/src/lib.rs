@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 //! Independent, read-only implementation of the TFDB v1 candidate format.
 //!
 //! The crate intentionally uses only the Rust standard library and does not

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="bb473a4956cf6ffc5c620ff61adf7813a7009db5bda0a9c096a380cfc0f19a3b">
+  <meta name="tfdb-source-sha256" content="cd551137ce870180f26ee150e1ba131710edab3bdd0ff83e9a5073c2081c2346">
   <title>Post-1.0 roadmap and project handoff — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -18,6 +18,7 @@
       <p class="sidebar-title">Contents</p>
       <ul>
         <li><a href="index.html">Overview</a></li>
+<li><a href="changelog.html">Changelog</a></li>
 <li><a href="roadmap.html" aria-current="page">Roadmap and handoff</a></li>
 <li><a href="tutorial.html">Tutorial</a></li>
 <li><a href="api.html">C++ API</a></li>
@@ -64,6 +65,9 @@ three read-only tools. <code>testdata/format-v1/valid-mixed.tfdb</code> is regen
 byte-for-byte by the C++ public API; the cross-language test compares both
 implementations over its valid and derived corruption/recovery cases. See
 <a href="rust-reader.html"><code>rust-reader.md</code></a> and <a href="evidence.html"><code>evidence.md</code></a>.</p>
+<p>The current post-baseline development version is 1.1.0 and is distributed
+under the BSD-2-Clause license. This does not move or rewrite the immutable
+<code>v1.0.0</code> tag, declare a 1.1.0 release, or freeze the persistent format.</p>
 <h3 id="two-version-axes">Two version axes</h3>
 <p>Do not confuse the library release with the persistent-format lifecycle:</p>
 <ul>
@@ -95,10 +99,10 @@ gate in section 5.</p>
 <h3 id="a-release-and-laboratory-hygiene">A. Release and laboratory hygiene</h3>
 <p>Complete the inexpensive repository work first:</p>
 <ol>
-<li>Choose and add a <code>LICENSE</code>; this is an owner/legal decision and must not be
-invented by an agent.</li>
-<li>Add <code>CHANGELOG.md</code> and document the distinction between source/API
-compatibility and on-media compatibility.</li>
+<li><strong>Complete:</strong> BSD-2-Clause is the project license and retains Alexander
+Safronenko's copyright notice in source and binary distributions.</li>
+<li><strong>Complete:</strong> <code>CHANGELOG.md</code> records source/API releases separately from the
+on-media format lifecycle.</li>
 <li>Add install/package support suitable for consumers while preserving the
 dependency-free runtime. A <code>DESTDIR</code>-aware Make target and optional
 pkg-config/CMake package metadata are sufficient; another build system need
@@ -307,7 +311,7 @@ overwriting the WSL2 reference artifact.</p>
 <h3 id="safe-restart-point">Safe restart point</h3>
 <p>Work that can begin without the hardware laboratory:</p>
 <ol>
-<li>decide the license and compatibility policy;</li>
+<li>maintain the BSD-2-Clause license and release/format compatibility policy;</li>
 <li>extend and independently review the shared negative corpus;</li>
 <li>configure native-Linux CI, TSan, fuzzing, and long soak;</li>
 <li>define and anonymize the first replay corpus;</li>
@@ -320,7 +324,7 @@ both readers, and evidence together before declaring format freeze.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">bb473a4956cf6ffc5c620ff61adf7813a7009db5bda0a9c096a380cfc0f19a3b</span></p>
+        <p>Source SHA-256: <span class="source-hash">cd551137ce870180f26ee150e1ba131710edab3bdd0ff83e9a5073c2081c2346</span></p>
       </footer>
     </main>
   </div>

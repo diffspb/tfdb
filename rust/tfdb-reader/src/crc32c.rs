@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 /// CRC32C (Castagnoli), reflected polynomial, as used by TFDB v1.
 pub fn crc32c(bytes: &[u8]) -> u32 {
     let mut value = 0xffff_ffffu32;

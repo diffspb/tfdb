@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 #ifndef TFDB_ASYNC_WRITER_HPP
 #define TFDB_ASYNC_WRITER_HPP
 

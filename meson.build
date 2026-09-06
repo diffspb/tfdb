@@ -1,7 +1,8 @@
 project(
   'tfdb',
   'cpp',
-  version: '1.0.0',
+  version: '1.1.0',
+  license: 'BSD-2-Clause',
   default_options: ['cpp_std=c++14', 'warning_level=3'],
   meson_version: '>=1.0.0',
 )
@@ -90,6 +91,12 @@ if get_option('tests').disable_auto_if(tfdb_is_subproject).allowed()
 endif
 
 if tfdb_install
+  install_data(
+    'LICENSE',
+    'CHANGELOG.md',
+    install_dir: join_paths(get_option('datadir'), 'doc', 'tfdb'),
+  )
+
   pkg = import('pkgconfig')
   pkg.generate(
     tfdb_library,

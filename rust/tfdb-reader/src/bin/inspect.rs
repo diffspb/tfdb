@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 use std::process::ExitCode;
 
 use tfdb_reader::Reader;

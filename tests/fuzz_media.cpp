@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 // Deterministic media fuzzer for the TFDB recovery and decode paths.
 //
 // It derives images from the committed conformance corpus by truncation and

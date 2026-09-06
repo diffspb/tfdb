@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 use std::path::PathBuf;
 
 use tfdb_reader::{decode_framed_v1, Event, Reader, FRAMED_RECORD_V1_PROFILE_ID};

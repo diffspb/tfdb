@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Safronenko
+// SPDX-License-Identifier: BSD-2-Clause
+
 #include "tfdb/counting_storage.hpp"
 
 namespace tfdb {

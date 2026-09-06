@@ -1,10 +1,11 @@
 [package]
 name = "tfdb-reader"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 rust-version = "1.70"
 publish = false
 description = "Independent, dependency-free read-only implementation of TFDB media format v1"
+license = "BSD-2-Clause"
 
 [lib]
 name = "tfdb_reader"
