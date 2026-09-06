@@ -77,10 +77,13 @@ Status common_check(ByteView bytes, const std::uint8_t magic[8],
   if (encoded_size != expected_size || encoded_size > bytes.size()) {
     return Status::Error(StatusCode::corrupt, "structure size mismatch");
   }
-  std::vector<std::uint8_t> copy(bytes.data(), bytes.data() + encoded_size);
-  const std::uint32_t expected_crc = get32(copy.data() + crc_offset);
-  put32(copy.data() + crc_offset, 0);
-  if (crc32c(ByteView(copy)) != expected_crc) {
+  if (crc_offset + 4 > encoded_size) {
+    return Status::Error(StatusCode::internal_error,
+                         "structure CRC field outside its own encoding");
+  }
+  const std::uint32_t expected_crc = get32(bytes.data() + crc_offset);
+  if (crc32c_with_zeroed_field(ByteView(bytes.data(), encoded_size),
+                               crc_offset) != expected_crc) {
     return Status::Error(StatusCode::corrupt, "structure CRC mismatch");
   }
   return Status::Ok();
@@ -93,7 +96,7 @@ void finish_crc(std::vector<std::uint8_t>* bytes, std::size_t offset) {
 
 }  // namespace
 
-std::uint32_t crc32c(ByteView bytes) {
+std::uint32_t crc32c_update(std::uint32_t state, ByteView bytes) {
   static const std::array<std::uint32_t, 256> table = [] {
     std::array<std::uint32_t, 256> result{};
     for (std::uint32_t i = 0; i != 256; ++i) {
@@ -104,10 +107,25 @@ std::uint32_t crc32c(ByteView bytes) {
     }
     return result;
   }();
-  std::uint32_t value = 0xffffffffu;
   for (std::size_t i = 0; i != bytes.size(); ++i)
-    value = table[(value ^ bytes.data()[i]) & 0xffu] ^ (value >> 8);
-  return value ^ 0xffffffffu;
+    state = table[(state ^ bytes.data()[i]) & 0xffu] ^ (state >> 8);
+  return state;
+}
+
+std::uint32_t crc32c_finish(std::uint32_t state) { return state ^ 0xffffffffu; }
+
+std::uint32_t crc32c(ByteView bytes) {
+  return crc32c_finish(crc32c_update(kCrc32cInit, bytes));
+}
+
+std::uint32_t crc32c_with_zeroed_field(ByteView bytes, std::size_t crc_offset) {
+  static const std::uint8_t zero[4] = {0, 0, 0, 0};
+  const std::uint8_t* data = bytes.data();
+  std::uint32_t state = crc32c_update(kCrc32cInit, ByteView(data, crc_offset));
+  state = crc32c_update(state, ByteView(zero, sizeof zero));
+  return crc32c_finish(crc32c_update(
+      state, ByteView(data + crc_offset + 4,
+                      bytes.size() - crc_offset - 4)));
 }
 
 std::uint64_t align_up(std::uint64_t value, std::uint32_t quantum,

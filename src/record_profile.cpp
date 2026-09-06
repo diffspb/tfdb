@@ -80,10 +80,9 @@ Status FramedRecordV1::decode_block(ByteView block,
         frame_size != header_size + payload_size || frame_size > block.size() - offset)
       return Status::Error(StatusCode::corrupt, "invalid FramedRecordV1 bounds");
     ByteView payload(data + header_size, payload_size);
-    std::vector<std::uint8_t> checked(data, data + frame_size);
-    const std::uint32_t expected_crc = get32(checked.data() + 28);
-    put32(checked.data() + 28, 0);
-    if (internal::crc32c(ByteView(checked)) != expected_crc)
+    const std::uint32_t expected_crc = get32(data + 28);
+    if (internal::crc32c_with_zeroed_field(ByteView(data, frame_size), 28) !=
+        expected_crc)
       return Status::Error(StatusCode::corrupt, "FramedRecordV1 frame CRC mismatch");
     RecordView record;
     record.encoded = ByteView(data, frame_size);

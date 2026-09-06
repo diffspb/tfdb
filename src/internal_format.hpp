@@ -123,7 +123,19 @@ struct PartitionFooter {
   std::uint32_t index_crc = 0;
 };
 
+// CRC32C (Castagnoli), reflected polynomial 0x82f63b78. crc32c() is the
+// one-shot form. The update/finish pair lets a caller checksum a structure
+// whose own CRC field must read as zero without copying the structure first:
+//   state = crc32c_update(kCrc32cInit, before_field);
+//   state = crc32c_update(state, four_zero_bytes);
+//   state = crc32c_update(state, after_field);
+//   value = crc32c_finish(state);
+constexpr std::uint32_t kCrc32cInit = 0xffffffffu;
+std::uint32_t crc32c_update(std::uint32_t state, ByteView bytes);
+std::uint32_t crc32c_finish(std::uint32_t state);
 std::uint32_t crc32c(ByteView bytes);
+// Checksums bytes[0, size) with the four bytes at crc_offset treated as zero.
+std::uint32_t crc32c_with_zeroed_field(ByteView bytes, std::size_t crc_offset);
 std::uint64_t align_up(std::uint64_t value, std::uint32_t quantum,
                        bool* overflow = nullptr);
 

@@ -1,3 +1,32 @@
+TEST(incremental_crc32c_matches_one_shot_and_zeroed_field) {
+  const std::string text = "123456789";
+  REQUIRE_EQ(tfdb::internal::crc32c(
+                 tfdb::ByteView(text.data(), text.size())),
+             0xe3069283u);
+
+  // Splitting an input at every boundary must not change the result.
+  for (std::size_t split = 0; split <= text.size(); ++split) {
+    std::uint32_t state = tfdb::internal::crc32c_update(
+        tfdb::internal::kCrc32cInit, tfdb::ByteView(text.data(), split));
+    state = tfdb::internal::crc32c_update(
+        state, tfdb::ByteView(text.data() + split, text.size() - split));
+    REQUIRE_EQ(tfdb::internal::crc32c_finish(state), 0xe3069283u);
+  }
+
+  // crc32c_with_zeroed_field must equal copying and zeroing the field, which
+  // is what the decoders did before, at every legal field offset.
+  std::vector<std::uint8_t> frame(64);
+  for (std::size_t i = 0; i != frame.size(); ++i)
+    frame[i] = static_cast<std::uint8_t>(i * 7 + 1);
+  for (std::size_t offset = 0; offset + 4 <= frame.size(); ++offset) {
+    std::vector<std::uint8_t> copy = frame;
+    for (unsigned i = 0; i != 4; ++i) copy[offset + i] = 0;
+    REQUIRE_EQ(tfdb::internal::crc32c_with_zeroed_field(
+                   tfdb::ByteView(frame), offset),
+               tfdb::internal::crc32c(tfdb::ByteView(copy)));
+  }
+}
+
 TEST(library_version_header_and_binary_agree) {
   // Catches a stale libtfdb.a linked against freshly updated headers, and a
   // TFDB_VERSION_STRING that drifted away from its numeric components. The
