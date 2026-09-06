@@ -5,7 +5,7 @@ object_dir=${OBJECT_DIR:?OBJECT_DIR is required}
 min_line=${MIN_LINE_COVERAGE:-85}
 min_outcome=${MIN_BRANCH_OUTCOME_COVERAGE:-48}
 sources=(
-  src/status.cpp src/storage_posix.cpp src/memory_storage.cpp
+  src/status.cpp src/version.cpp src/storage_posix.cpp src/memory_storage.cpp
   src/counting_storage.cpp src/codec.cpp src/internal_format.cpp
   src/ring_store.cpp src/record_profile.cpp src/async_writer.cpp
 )
