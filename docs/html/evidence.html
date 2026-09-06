@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="bc4d8a82c80ac73a483db35e2182ad670acc454379bf88e4787a075331456416">
+  <meta name="tfdb-source-sha256" content="30d45535e77f1551e8d76bcd70f97f58a6cdd5e9d730ca74e7d85ba81d38d981">
   <title>Reference verification evidence — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -75,6 +75,51 @@ native-Linux fuzz/TSan/soak, trace replay, target power cuts/endurance, and a
 pilot remain open as listed in <a href="roadmap.html"><code>roadmap.md</code></a>. The historical
 benchmark digest and measurements below are preserved rather than relabeled as
 evidence for this changed worktree.</p>
+<h2 id="low-risk-hardening-evidence-2026-09-06-branch-maintenance-low-risk-hardening">Low-risk hardening evidence (2026-09-06, branch maintenance/low-risk-hardening)</h2>
+<p>Same host and toolchain as the section above, plus CMake 4.4.3, Meson 1.12.0,
+and Ninja 1.13.2 from a disposable virtualenv. Reproduced on this worktree:</p>
+<ul>
+<li><code>make check</code>: <strong>81/81</strong> library/recovery/integration tests and the CLI smoke
+tests pass. Four are new: the version-consistency check, the incremental
+CRC32C equivalence check, the async thread-exception guard, and two
+writer-health cases;</li>
+<li><code>make crash-matrix</code>: all <strong>14</strong> bounded recovery groups pass;</li>
+<li><code>make sanitize</code>: 81/81 tests and tool smoke pass under ASan and UBSan;</li>
+<li><code>make coverage</code>: <strong>92.3%</strong> production line coverage (2526 executable lines),
+50.8% of 3607 branch outcomes; every aggregate and per-file floor passes.
+<code>src/version.cpp</code> was added to the gated source list so a new production
+source cannot silently escape the gate;</li>
+<li><code>make cxx17-check</code> (new): the library, tools, examples, and tests rebuild as
+C++17 with <code>-Werror</code> and leave no <code>Status</code> unchecked;</li>
+<li><code>make fuzz</code> (new): <strong>500,000</strong> derived-image iterations against
+<code>testdata/format-v1/valid-mixed.tfdb</code> with seed 20260906, under ASan and
+UBSan, produced no crash, hang, sanitizer report, or undocumented status
+code, and saved no artifact. This is ten times the exploratory run that
+motivated the harness. It is a whole-image mutation fuzzer, not a
+coverage-guided one; that gate stays open;</li>
+<li><code>make build-system-test</code>: CMake configure/build/CTest/install and the
+installed-package CMake consumer pass; Meson configure/compile/test/install
+pass. The final Meson consumer step needs a <code>pkg-config</code> binary this host
+does not have, so it remains unverified here;</li>
+<li><code>add_subdirectory()</code> consumption was checked directly: a parent project gets
+only the <code>tfdb</code> target, no <code>BUILD_TESTING</code> option, and no TFDB install rules.
+<code>-DTFDB_POSITION_INDEPENDENT_CODE=ON</code> adds <code>-fPIC</code> and the default does not;</li>
+<li>the shared conformance volume still regenerates byte-for-byte to SHA-256
+<code>7d81004d396903b4f7194a5635f31e11fbf4664ca2fa23b38a5e5588e5bac254</code> after the
+CRC32C refactor, which is the evidence that no encoded byte changed;</li>
+<li><code>python3 docs/build_html.py --check</code> validates all 14 pages.</li>
+</ul>
+<p>Two measurements motivated changes rather than recording them:</p>
+<ul>
+<li>heap allocations during a 20,000-record query fell from 24,041 to 3,330
+(about 86% fewer) once CRC verification stopped copying each structure and
+each record;</li>
+<li>removing the exception guard from <code>AsyncWriter::run()</code> makes the test binary
+abort with <code>terminate called after throwing an instance of std::runtime_error</code> and dump core, which is the failure the guard prevents.</li>
+</ul>
+<p>Rust tests and <code>make conformance</code> were <strong>not</strong> re-run here: no <code>cargo</code> on this
+host. Neither the C++ library nor its tests depend on it, but the
+cross-language gate should be re-run before this branch is relied on. <code>make tsan</code> remains unclaimed for the reason recorded below.</p>
 <h2 id="test-and-analysis-results">Test and analysis results</h2>
 <p>Reference environment on 2026-09-01:</p>
 <pre><code class="language-text">Linux 6.6.87.2-microsoft-standard-WSL2 x86_64
@@ -368,7 +413,7 @@ before freezing format v1.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">bc4d8a82c80ac73a483db35e2182ad670acc454379bf88e4787a075331456416</span></p>
+        <p>Source SHA-256: <span class="source-hash">30d45535e77f1551e8d76bcd70f97f58a6cdd5e9d730ca74e7d85ba81d38d981</span></p>
       </footer>
     </main>
   </div>

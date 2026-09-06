@@ -42,6 +42,55 @@ pilot remain open as listed in [`roadmap.md`](roadmap.md). The historical
 benchmark digest and measurements below are preserved rather than relabeled as
 evidence for this changed worktree.
 
+## Low-risk hardening evidence (2026-09-06, branch maintenance/low-risk-hardening)
+
+Same host and toolchain as the section above, plus CMake 4.4.3, Meson 1.12.0,
+and Ninja 1.13.2 from a disposable virtualenv. Reproduced on this worktree:
+
+- `make check`: **81/81** library/recovery/integration tests and the CLI smoke
+  tests pass. Four are new: the version-consistency check, the incremental
+  CRC32C equivalence check, the async thread-exception guard, and two
+  writer-health cases;
+- `make crash-matrix`: all **14** bounded recovery groups pass;
+- `make sanitize`: 81/81 tests and tool smoke pass under ASan and UBSan;
+- `make coverage`: **92.3%** production line coverage (2526 executable lines),
+  50.8% of 3607 branch outcomes; every aggregate and per-file floor passes.
+  `src/version.cpp` was added to the gated source list so a new production
+  source cannot silently escape the gate;
+- `make cxx17-check` (new): the library, tools, examples, and tests rebuild as
+  C++17 with `-Werror` and leave no `Status` unchecked;
+- `make fuzz` (new): **500,000** derived-image iterations against
+  `testdata/format-v1/valid-mixed.tfdb` with seed 20260906, under ASan and
+  UBSan, produced no crash, hang, sanitizer report, or undocumented status
+  code, and saved no artifact. This is ten times the exploratory run that
+  motivated the harness. It is a whole-image mutation fuzzer, not a
+  coverage-guided one; that gate stays open;
+- `make build-system-test`: CMake configure/build/CTest/install and the
+  installed-package CMake consumer pass; Meson configure/compile/test/install
+  pass. The final Meson consumer step needs a `pkg-config` binary this host
+  does not have, so it remains unverified here;
+- `add_subdirectory()` consumption was checked directly: a parent project gets
+  only the `tfdb` target, no `BUILD_TESTING` option, and no TFDB install rules.
+  `-DTFDB_POSITION_INDEPENDENT_CODE=ON` adds `-fPIC` and the default does not;
+- the shared conformance volume still regenerates byte-for-byte to SHA-256
+  `7d81004d396903b4f7194a5635f31e11fbf4664ca2fa23b38a5e5588e5bac254` after the
+  CRC32C refactor, which is the evidence that no encoded byte changed;
+- `python3 docs/build_html.py --check` validates all 14 pages.
+
+Two measurements motivated changes rather than recording them:
+
+- heap allocations during a 20,000-record query fell from 24,041 to 3,330
+  (about 86% fewer) once CRC verification stopped copying each structure and
+  each record;
+- removing the exception guard from `AsyncWriter::run()` makes the test binary
+  abort with `terminate called after throwing an instance of
+  std::runtime_error` and dump core, which is the failure the guard prevents.
+
+Rust tests and `make conformance` were **not** re-run here: no `cargo` on this
+host. Neither the C++ library nor its tests depend on it, but the
+cross-language gate should be re-run before this branch is relied on. `make
+tsan` remains unclaimed for the reason recorded below.
+
 ## Test and analysis results
 
 Reference environment on 2026-09-01:
