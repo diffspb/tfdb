@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="d8e69dd6cfbe861519267bb0c1c66f52f58ed912c63c906a7c3cb0900ef83385">
+  <meta name="tfdb-source-sha256" content="6c47d4d17e433d756f9459bd326bec542b5c0016a42f67353430a557bfb4f426">
   <title>Verification and acceptance strategy — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -114,9 +114,42 @@ than a block followed only by a checkpoint must become durable.</p>
 </ul>
 <h3 id="fuzz-sanitizer-tests">Fuzz/sanitizer tests</h3>
 <p>All decoders accept attacker-like/corrupt bytes and must fail without out-of-
-bounds access or unbounded allocation. CI profiles should run ASan+UBSan and a
-coverage-guided fuzzer over volume/partition/block/compression decoding. These
-tools are optional build-time dependencies, not runtime library dependencies.</p>
+bounds access or unbounded allocation. These tools are optional build-time
+dependencies, not runtime library dependencies.</p>
+<p><code>make fuzz</code> runs the repeatable media fuzzer in <code>tests/fuzz_media.cpp</code>. It
+derives images from the committed conformance corpus and drives each one
+through lazy open, strict open, <code>inspect()</code>, <code>scan_blocks()</code>, and
+<code>query_records()</code> across several time domains. Mutation is biased toward the
+structural prefix — both volume header copies, the partition header regions,
+and the first block frames — because uniform byte flipping rarely reaches a
+length or offset field. Shapes are single-bit flips, byte replacement, and
+sector-sized splats that model a torn or reused sector, plus truncation at a
+random length.</p>
+<p>The oracle is deliberately mechanical: no image may crash, hang, trip a
+sanitizer, or yield a status code outside the documented set. Whether a
+particular corrupted image <em>should</em> have remained readable is decided by the
+shared corpus manifest in <code>testdata/format-v1/</code>, not by a random mutator. The
+harness always exercises the unmodified corpus first, so a broken harness fails
+immediately instead of after a long clean run.</p>
+<p>Runs are reproducible from <code>(corpus, seed, iteration)</code>, and the target always
+builds its own ASan/UBSan binary because the sanitizers are the detector:</p>
+<pre><code class="language-sh">make fuzz                            # quick regular run, 20,000 iterations
+make fuzz FUZZ_ITERATIONS=500000     # long run
+make fuzz FUZZ_SEED=$(date +%s)      # explore a new seed
+make fuzz FUZZ_TIMEOUT=3600          # bound the wall clock
+</code></pre>
+<p>A finding prints its seed and iteration, writes the offending image under
+<code>FUZZ_ARTIFACTS</code> (default <code>build/fuzz</code>), and prints the replay command:</p>
+<pre><code class="language-sh">build/fuzz/tfdb_fuzz_media --image build/fuzz/tfdb-fuzz-SEED-ITERATION.tfdb
+</code></pre>
+<p>Regular use means a fixed seed on every change and a rotating seed on a
+schedule, so the corpus is explored more widely over time while any single
+finding stays reproducible. A saved artifact that reveals a real specification
+gap belongs in the shared corpus with an expected classification, not only in
+the fuzz harness.</p>
+<p>Coverage-guided fuzzing over the individual decoders remains open work; this
+harness covers whole recovered volume images and needs no external fuzzing
+runtime.</p>
 <h2 id="2-workload-profiles">2. Workload profiles</h2>
 <p>The load generator uses deterministic seeds and reports input bytes, host write
 bytes/calls, flushes, blocks, partitions, compression ratio, query bytes read,
@@ -249,6 +282,8 @@ interval whose nanosecond representation cannot fit and drive the clock to
 make sanitize       # ASan + UBSan
 make coverage       # instrumented tests and production-source summary
 make crash-matrix   # bounded deterministic crash/fault suite
+make fuzz           # ASan/UBSan media fuzzer over derived corpus images
+make cxx17-check    # C++17 rebuild proving no Status is left unchecked
 make tsan           # native-Linux ThreadSanitizer target
 make benchmark      # deterministic workload profiles
 make rust-test      # independent reader unit/corpus/recovery tests
@@ -274,7 +309,7 @@ characterize its internal write amplification.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">d8e69dd6cfbe861519267bb0c1c66f52f58ed912c63c906a7c3cb0900ef83385</span></p>
+        <p>Source SHA-256: <span class="source-hash">6c47d4d17e433d756f9459bd326bec542b5c0016a42f67353430a557bfb4f426</span></p>
       </footer>
     </main>
   </div>

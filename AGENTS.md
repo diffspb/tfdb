@@ -57,8 +57,17 @@ make check
 make crash-matrix
 make sanitize
 make coverage
+make cxx17-check
+make fuzz
 python3 docs/build_html.py --check
 ```
+
+`make fuzz` defaults to a short run. Before a release or format decision also
+run a long one with a fresh seed, for example
+`make fuzz FUZZ_ITERATIONS=500000 FUZZ_SEED=$(date +%s)`, and record the
+iteration count and seed in `docs/evidence.md`. A saved failing image that
+exposes a specification gap belongs in `testdata/format-v1/` with an expected
+classification, not only in the fuzz harness.
 
 Also run the structural validator supplied by the local skill-creator
 environment against `skills/tfdb-integration`; its installation path is not a

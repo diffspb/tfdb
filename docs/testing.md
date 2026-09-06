@@ -87,9 +87,52 @@ than a block followed only by a checkpoint must become durable.
 ### Fuzz/sanitizer tests
 
 All decoders accept attacker-like/corrupt bytes and must fail without out-of-
-bounds access or unbounded allocation. CI profiles should run ASan+UBSan and a
-coverage-guided fuzzer over volume/partition/block/compression decoding. These
-tools are optional build-time dependencies, not runtime library dependencies.
+bounds access or unbounded allocation. These tools are optional build-time
+dependencies, not runtime library dependencies.
+
+`make fuzz` runs the repeatable media fuzzer in `tests/fuzz_media.cpp`. It
+derives images from the committed conformance corpus and drives each one
+through lazy open, strict open, `inspect()`, `scan_blocks()`, and
+`query_records()` across several time domains. Mutation is biased toward the
+structural prefix — both volume header copies, the partition header regions,
+and the first block frames — because uniform byte flipping rarely reaches a
+length or offset field. Shapes are single-bit flips, byte replacement, and
+sector-sized splats that model a torn or reused sector, plus truncation at a
+random length.
+
+The oracle is deliberately mechanical: no image may crash, hang, trip a
+sanitizer, or yield a status code outside the documented set. Whether a
+particular corrupted image *should* have remained readable is decided by the
+shared corpus manifest in `testdata/format-v1/`, not by a random mutator. The
+harness always exercises the unmodified corpus first, so a broken harness fails
+immediately instead of after a long clean run.
+
+Runs are reproducible from `(corpus, seed, iteration)`, and the target always
+builds its own ASan/UBSan binary because the sanitizers are the detector:
+
+```sh
+make fuzz                            # quick regular run, 20,000 iterations
+make fuzz FUZZ_ITERATIONS=500000     # long run
+make fuzz FUZZ_SEED=$(date +%s)      # explore a new seed
+make fuzz FUZZ_TIMEOUT=3600          # bound the wall clock
+```
+
+A finding prints its seed and iteration, writes the offending image under
+`FUZZ_ARTIFACTS` (default `build/fuzz`), and prints the replay command:
+
+```sh
+build/fuzz/tfdb_fuzz_media --image build/fuzz/tfdb-fuzz-SEED-ITERATION.tfdb
+```
+
+Regular use means a fixed seed on every change and a rotating seed on a
+schedule, so the corpus is explored more widely over time while any single
+finding stays reproducible. A saved artifact that reveals a real specification
+gap belongs in the shared corpus with an expected classification, not only in
+the fuzz harness.
+
+Coverage-guided fuzzing over the individual decoders remains open work; this
+harness covers whole recovered volume images and needs no external fuzzing
+runtime.
 
 ## 2. Workload profiles
 
@@ -195,6 +238,8 @@ make check          # library tests and CLI black-box tests
 make sanitize       # ASan + UBSan
 make coverage       # instrumented tests and production-source summary
 make crash-matrix   # bounded deterministic crash/fault suite
+make fuzz           # ASan/UBSan media fuzzer over derived corpus images
+make cxx17-check    # C++17 rebuild proving no Status is left unchecked
 make tsan           # native-Linux ThreadSanitizer target
 make benchmark      # deterministic workload profiles
 make rust-test      # independent reader unit/corpus/recovery tests

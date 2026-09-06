@@ -28,6 +28,7 @@ make
 make check
 make sanitize
 make coverage
+make fuzz
 make benchmark
 ```
 

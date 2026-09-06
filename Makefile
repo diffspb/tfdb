@@ -26,7 +26,7 @@ TOOL_NAMES := tfdb_format tfdb_inspect tfdb_verify tfdb_dump tfdb_loadgen
 TOOL_BINARIES := $(TOOL_NAMES:%=$(BUILD_DIR)/tools/%)
 
 .PHONY: all clean test tools tool-test check sanitize tsan coverage crash-matrix benchmark cxx17-check \
-	rust-build rust-test conformance build-system-test
+	fuzz fuzz-build rust-build rust-test conformance build-system-test
 
 all: $(LIBRARY)
 
@@ -87,6 +87,40 @@ coverage:
 	$(MAKE) BUILD_DIR=build/coverage CXXFLAGS="-O0 -g --coverage" \
 		LDFLAGS="-pthread --coverage" test tool-test
 	OBJECT_DIR=$(abspath build/coverage/src) bash tests/coverage_summary.sh
+
+# Media fuzzing. Sanitizers are the detector, so the target always builds its
+# own ASan/UBSan binary rather than reusing $(BUILD_DIR).
+#
+#   make fuzz                          quick regular run
+#   make fuzz FUZZ_ITERATIONS=500000   long run
+#   make fuzz FUZZ_SEED=$$(date +%s)    explore a new seed
+#
+# Every finding prints its seed and iteration and saves the image; replay it
+# with: build/fuzz/tfdb_fuzz_media --image PATH
+FUZZ_BUILD_DIR := build/fuzz
+FUZZ_BINARY := $(FUZZ_BUILD_DIR)/tfdb_fuzz_media
+FUZZ_CORPUS ?= testdata/format-v1/valid-mixed.tfdb
+FUZZ_ITERATIONS ?= 20000
+FUZZ_SEED ?= 20260906
+FUZZ_ARTIFACTS ?= $(FUZZ_BUILD_DIR)
+FUZZ_CXXFLAGS ?= -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined
+FUZZ_TIMEOUT ?= 0
+
+$(FUZZ_BINARY): tests/fuzz_media.cpp $(LIB_SOURCES) $(wildcard include/tfdb/*.hpp)
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(FUZZ_CXXFLAGS) $< $(LIB_SOURCES) \
+		$(LDFLAGS) -fsanitize=address,undefined -o $@
+
+fuzz-build: $(FUZZ_BINARY)
+
+fuzz: $(FUZZ_BINARY)
+	@mkdir -p $(FUZZ_ARTIFACTS)
+	ASAN_OPTIONS=detect_leaks=0 \
+	UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
+	$(if $(filter-out 0,$(FUZZ_TIMEOUT)),timeout $(FUZZ_TIMEOUT),) \
+	$(FUZZ_BINARY) --corpus $(FUZZ_CORPUS) \
+		--iterations $(FUZZ_ITERATIONS) --seed $(FUZZ_SEED) \
+		--artifacts $(FUZZ_ARTIFACTS)
 
 crash-matrix: $(TEST_BINARY)
 	timeout 120 $(TEST_BINARY) --filter torn_tail
