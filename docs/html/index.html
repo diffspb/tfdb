@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="62feac205a4a2fd7ade69ee5d4f8c54561354f04978d6c86db6dfd6f003f8ea1">
+  <meta name="tfdb-source-sha256" content="4c243112215ca45168b4a5ce426a4f2536f4400bf2f336e48ce4275f8473a2da">
   <title>TFDB — Telemetry Flash DB — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -82,7 +82,9 @@ and time domain across automatic rotation. Multiple readers may query candidate
 blocks or use a record profile for exact time and selector filtering.</p>
 <p>The tools are:</p>
 <ul>
-<li><code>tfdb_format</code>: create/format a fixed regular file or format an opened device;</li>
+<li><code>tfdb_format</code>: create/format a fixed regular file, or format an already
+provisioned device, which additionally requires <code>--yes</code> and refuses a path
+listed in <code>/proc/self/mounts</code>;</li>
 <li><code>tfdb_inspect</code>: print geometry, generations, options, and time bounds;</li>
 <li><code>tfdb_verify</code>: validate every currently reachable block and report gaps;</li>
 <li><code>tfdb_dump</code>: stream candidate blocks or decoded FramedRecordV1 records;</li>
@@ -144,7 +146,7 @@ to pass. Continue with the ordered plan in <a href="roadmap.html"><code>docs/roa
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">62feac205a4a2fd7ade69ee5d4f8c54561354f04978d6c86db6dfd6f003f8ea1</span></p>
+        <p>Source SHA-256: <span class="source-hash">4c243112215ca45168b4a5ce426a4f2536f4400bf2f336e48ce4275f8473a2da</span></p>
       </footer>
     </main>
   </div>

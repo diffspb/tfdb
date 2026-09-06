@@ -77,6 +77,29 @@ test "$dump_status" -eq 3
 grep -q 'gaps=1' "$work_dir/corrupt-verify.out"
 grep -q '^gap ' "$work_dir/corrupt-dump.err"
 
+# Formatting a device is destructive and its target sits on a command line
+# next to the operator's own disks, so it must be authorized explicitly.
+device_store="$work_dir/device.tfdb"
+cp "$empty_store" "$device_store"
+set +e
+"$tool_dir/tfdb_format" "$device_store" --device \
+  >"$work_dir/device-noyes.out" 2>"$work_dir/device-noyes.err"
+device_noyes_status=$?
+"$tool_dir/tfdb_format" "$device_store" --size "$size" --yes \
+  >"$work_dir/yes-nodevice.out" 2>"$work_dir/yes-nodevice.err"
+yes_nodevice_status=$?
+set -e
+test "$device_noyes_status" -eq 1
+grep -q 'without --yes' "$work_dir/device-noyes.err"
+test "$yes_nodevice_status" -eq 1
+grep -q 'applies to --device only' "$work_dir/yes-nodevice.err"
+# The authorized path still works.
+"$tool_dir/tfdb_format" "$device_store" --device --yes \
+  --partition 65536 --index 4096 --block 256 --quantum 4096 \
+  >"$work_dir/device-yes.out"
+grep -q '^formatted ' "$work_dir/device-yes.out"
+"$tool_dir/tfdb_verify" "$device_store" >/dev/null
+
 # The library release is declared in four places that can drift apart. Keep
 # them consistent here, where every build frontend already runs this script.
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

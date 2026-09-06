@@ -59,7 +59,9 @@ blocks or use a record profile for exact time and selector filtering.
 
 The tools are:
 
-- `tfdb_format`: create/format a fixed regular file or format an opened device;
+- `tfdb_format`: create/format a fixed regular file, or format an already
+  provisioned device, which additionally requires `--yes` and refuses a path
+  listed in `/proc/self/mounts`;
 - `tfdb_inspect`: print geometry, generations, options, and time bounds;
 - `tfdb_verify`: validate every currently reachable block and report gaps;
 - `tfdb_dump`: stream candidate blocks or decoded FramedRecordV1 records;
