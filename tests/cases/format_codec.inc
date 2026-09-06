@@ -1,3 +1,16 @@
+TEST(library_version_header_and_binary_agree) {
+  // Catches a stale libtfdb.a linked against freshly updated headers, and a
+  // TFDB_VERSION_STRING that drifted away from its numeric components. The
+  // VERSION file, CMake, and Meson are cross-checked in tool_smoke.sh.
+  REQUIRE_EQ(std::string(tfdb::library_version()),
+             std::string(TFDB_VERSION_STRING));
+  std::ostringstream composed;
+  composed << TFDB_VERSION_MAJOR << '.' << TFDB_VERSION_MINOR << '.'
+           << TFDB_VERSION_PATCH;
+  REQUIRE_EQ(std::string(TFDB_VERSION_STRING), composed.str());
+  REQUIRE(TFDB_VERSION_NUMBER >= 10000);
+}
+
 TEST(crc32c_known_vector) {
   const char text[] = "123456789";
   REQUIRE_EQ(tfdb::internal::crc32c(tfdb::ByteView(text, 9)), 0xe3069283u);

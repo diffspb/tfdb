@@ -76,3 +76,26 @@ test "$verify_status" -eq 3
 test "$dump_status" -eq 3
 grep -q 'gaps=1' "$work_dir/corrupt-verify.out"
 grep -q '^gap ' "$work_dir/corrupt-dump.err"
+
+# The library release is declared in four places that can drift apart. Keep
+# them consistent here, where every build frontend already runs this script.
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+version_file=$(tr -d '[:space:]' < "$repo_root/VERSION")
+header_version=$(sed -n 's/^#define TFDB_VERSION_STRING "\(.*\)"$/\1/p' \
+  "$repo_root/include/tfdb/version.hpp")
+header_major=$(sed -n 's/^#define TFDB_VERSION_MAJOR \([0-9]*\)$/\1/p' \
+  "$repo_root/include/tfdb/version.hpp")
+header_minor=$(sed -n 's/^#define TFDB_VERSION_MINOR \([0-9]*\)$/\1/p' \
+  "$repo_root/include/tfdb/version.hpp")
+header_patch=$(sed -n 's/^#define TFDB_VERSION_PATCH \([0-9]*\)$/\1/p' \
+  "$repo_root/include/tfdb/version.hpp")
+cmake_version=$(sed -n 's/^project(TFDB VERSION \([0-9.]*\).*$/\1/p' \
+  "$repo_root/CMakeLists.txt")
+meson_version=$(sed -n "s/^  version: '\([0-9.]*\)',$/\1/p" \
+  "$repo_root/meson.build")
+
+test -n "$version_file"
+test "$header_version" = "$version_file"
+test "$header_major.$header_minor.$header_patch" = "$version_file"
+test "$cmake_version" = "$version_file"
+test "$meson_version" = "$version_file"

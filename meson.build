@@ -16,6 +16,7 @@ tfdb_public_inc = include_directories('include')
 tfdb_private_inc = include_directories('src')
 tfdb_sources = files(
   'src/status.cpp',
+  'src/version.cpp',
   'src/storage_posix.cpp',
   'src/memory_storage.cpp',
   'src/counting_storage.cpp',

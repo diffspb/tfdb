@@ -11,6 +11,7 @@ LDFLAGS += -pthread
 BUILD_DIR := build
 LIB_SOURCES := \
 	src/status.cpp \
+	src/version.cpp \
 	src/storage_posix.cpp \
 	src/memory_storage.cpp \
 	src/counting_storage.cpp \

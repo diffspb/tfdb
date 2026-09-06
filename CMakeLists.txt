@@ -41,6 +41,7 @@ find_package(Threads REQUIRED)
 
 set(TFDB_SOURCES
     src/status.cpp
+    src/version.cpp
     src/storage_posix.cpp
     src/memory_storage.cpp
     src/counting_storage.cpp

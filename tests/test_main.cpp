@@ -24,6 +24,7 @@
 #include "tfdb/record_profile.hpp"
 #include "tfdb/ring_store.hpp"
 #include "tfdb/storage.hpp"
+#include "tfdb/version.hpp"
 
 namespace {
 
