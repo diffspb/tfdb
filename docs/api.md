@@ -72,6 +72,34 @@ mix direct `RingStore` mutation with an active `AsyncWriter`; keep rotation,
 checkpoint, and shutdown under one integration owner. The `Storage` backend
 must support concurrent positional reads and one positional writer.
 
+`AsyncWriter` holds a reference, not ownership. The `RingStore` it wraps must
+outlive it; destroy or `stop()` the wrapper before the store.
+
+#### Reader freshness
+
+A `RingStore` builds its partition catalog during `open()` and never refreshes
+it. Consequences differ by topology:
+
+- readers sharing the writer's `RingStore` observe every published block,
+  because the writer updates that one catalog;
+- a separate read-only `RingStore` over the same media — in this process or
+  another — observes exactly the volume as of its own `open()`. Blocks
+  published afterwards are invisible to it for its whole lifetime.
+
+An external process that follows a live volume must therefore reopen to advance
+its view, not merely repeat the query. Reopening repeats recovery, including a
+bounded block scan of any partition without a valid footer, so poll intervals
+should be chosen against measured reopen cost on the target media rather than
+assumed to be free.
+
+#### Blocking and observability
+
+`checkpoint()`, `close()`, and rotation call the backend flush while holding the
+store's internal lock. Every other `RingStore` entry point, including
+`metrics()`, `writer_status()`, `inspect()`, and `query_blocks()`, waits behind
+an in-flight flush. Size a health monitor's own timeouts accordingly: on a
+stalling device the observation blocks for as long as the flush does.
+
 ## Status API
 
 ### `enum class StatusCode`
@@ -355,7 +383,16 @@ reachable.
 
 `open()` validates the volume, discovers generations, uses sealed indexes or
 bounded block scans, and reconstructs the active partition. The store retains
-the backend `shared_ptr` for its lifetime.
+the backend `shared_ptr` for its lifetime. The catalog it builds is fixed for
+the store's lifetime; see [reader freshness](#reader-freshness).
+
+Both `format()` and a writable `open()` draw a fresh 128-bit incarnation ID
+from Linux `getrandom()`, which **blocks until the kernel CSPRNG is seeded**.
+On a headless target with no hardware entropy source that can take seconds or
+longer immediately after boot, so a service that opens its store early in
+startup should either accept that wait or defer the writable open until the
+system reports the pool as initialized. Read-only opens draw no randomness and
+are unaffected.
 
 ### Append and durability
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="59785f4f071c08b0986a18741d1534c4da9f8ba65a7fc4debd3432285be7f749">
+  <meta name="tfdb-source-sha256" content="a3a3984950a41dd396111777b597296b1b0690de54f64f2c7b5dfc8aa4657a38">
   <title>TFDB architecture — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -289,6 +289,13 @@ read-only file descriptors remain allowed. Other processes may open the file/dev
 generation validation but no stable snapshot or lease. This is deliberate:
 sequential storage is inspectable while live, but a slow external reader cannot
 block data collection.</p>
+<p>Inspectable while live means inspectable as of <code>open()</code>. A store's partition
+catalog is built during open and never refreshed, so an external follower
+advances its view by reopening, and pays recovery — including a bounded scan of
+any footerless partition — each time it does. Readers that share the writer's
+own <code>RingStore</code> see published blocks immediately, because they read the
+catalog the writer maintains. A cheaper incremental refresh for external
+followers is a compatible future addition; it is not an on-media change.</p>
 <h2 id="10-extensibility-and-compatibility">10. Extensibility and compatibility</h2>
 <p>All integers are explicitly encoded little-endian; C++ object layout is never
 written directly. Every persistent structure has a magic, size, major/minor
@@ -377,7 +384,7 @@ controller, cache, and flash stack.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">59785f4f071c08b0986a18741d1534c4da9f8ba65a7fc4debd3432285be7f749</span></p>
+        <p>Source SHA-256: <span class="source-hash">a3a3984950a41dd396111777b597296b1b0690de54f64f2c7b5dfc8aa4657a38</span></p>
       </footer>
     </main>
   </div>

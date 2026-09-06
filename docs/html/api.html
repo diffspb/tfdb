@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="e14b0d95d3cedc19314f53aae8ef6f78251242bd01f6a009c5259c10f98c5fce">
+  <meta name="tfdb-source-sha256" content="2428d7801911638e9da8b18b3b2ccdae4dc6be5cbc5c6f94e47f2446b3953dfd">
   <title>TFDB C++14 API reference — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -125,6 +125,29 @@ report a gap if rotation overtakes them.</p>
 mix direct <code>RingStore</code> mutation with an active <code>AsyncWriter</code>; keep rotation,
 checkpoint, and shutdown under one integration owner. The <code>Storage</code> backend
 must support concurrent positional reads and one positional writer.</p>
+<p><code>AsyncWriter</code> holds a reference, not ownership. The <code>RingStore</code> it wraps must
+outlive it; destroy or <code>stop()</code> the wrapper before the store.</p>
+<h4 id="reader-freshness">Reader freshness</h4>
+<p>A <code>RingStore</code> builds its partition catalog during <code>open()</code> and never refreshes
+it. Consequences differ by topology:</p>
+<ul>
+<li>readers sharing the writer's <code>RingStore</code> observe every published block,
+because the writer updates that one catalog;</li>
+<li>a separate read-only <code>RingStore</code> over the same media — in this process or
+another — observes exactly the volume as of its own <code>open()</code>. Blocks
+published afterwards are invisible to it for its whole lifetime.</li>
+</ul>
+<p>An external process that follows a live volume must therefore reopen to advance
+its view, not merely repeat the query. Reopening repeats recovery, including a
+bounded block scan of any partition without a valid footer, so poll intervals
+should be chosen against measured reopen cost on the target media rather than
+assumed to be free.</p>
+<h4 id="blocking-and-observability">Blocking and observability</h4>
+<p><code>checkpoint()</code>, <code>close()</code>, and rotation call the backend flush while holding the
+store's internal lock. Every other <code>RingStore</code> entry point, including
+<code>metrics()</code>, <code>writer_status()</code>, <code>inspect()</code>, and <code>query_blocks()</code>, waits behind
+an in-flight flush. Size a health monitor's own timeouts accordingly: on a
+stalling device the observation blocks for as long as the flush does.</p>
 <h2 id="status-api">Status API</h2>
 <h3 id="enum-class-statuscode"><code>enum class StatusCode</code></h3>
 <div class="table-wrap"><table class="data-table">
@@ -553,7 +576,15 @@ physically present but belong to a different volume incarnation and are not
 reachable.</p>
 <p><code>open()</code> validates the volume, discovers generations, uses sealed indexes or
 bounded block scans, and reconstructs the active partition. The store retains
-the backend <code>shared_ptr</code> for its lifetime.</p>
+the backend <code>shared_ptr</code> for its lifetime. The catalog it builds is fixed for
+the store's lifetime; see <a href="#reader-freshness">reader freshness</a>.</p>
+<p>Both <code>format()</code> and a writable <code>open()</code> draw a fresh 128-bit incarnation ID
+from Linux <code>getrandom()</code>, which <strong>blocks until the kernel CSPRNG is seeded</strong>.
+On a headless target with no hardware entropy source that can take seconds or
+longer immediately after boot, so a service that opens its store early in
+startup should either accept that wait or defer the writable open until the
+system reports the pool as initialized. Read-only opens draw no randomness and
+are unaffected.</p>
 <h3 id="append-and-durability">Append and durability</h3>
 <pre><code class="language-cpp">Status append(ByteView encoded_record, std::int64_t index_time_ns,
               std::uint32_t record_flags = 0);
@@ -928,7 +959,7 @@ power-loss and endurance requirements.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">e14b0d95d3cedc19314f53aae8ef6f78251242bd01f6a009c5259c10f98c5fce</span></p>
+        <p>Source SHA-256: <span class="source-hash">2428d7801911638e9da8b18b3b2ccdae4dc6be5cbc5c6f94e47f2446b3953dfd</span></p>
       </footer>
     </main>
   </div>

@@ -295,6 +295,14 @@ generation validation but no stable snapshot or lease. This is deliberate:
 sequential storage is inspectable while live, but a slow external reader cannot
 block data collection.
 
+Inspectable while live means inspectable as of `open()`. A store's partition
+catalog is built during open and never refreshed, so an external follower
+advances its view by reopening, and pays recovery — including a bounded scan of
+any footerless partition — each time it does. Readers that share the writer's
+own `RingStore` see published blocks immediately, because they read the
+catalog the writer maintains. A cheaper incremental refresh for external
+followers is a compatible future addition; it is not an on-media change.
+
 ## 10. Extensibility and compatibility
 
 All integers are explicitly encoded little-endian; C++ object layout is never
