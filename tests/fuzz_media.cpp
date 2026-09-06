@@ -225,6 +225,11 @@ bool parse_u64(const char* text, std::uint64_t* output) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  // Redirected stdout is fully buffered by default, so a sharded or CI run
+  // shows nothing at all until a shard's buffer fills or it exits. Progress
+  // reporting is the point of a long run; make it line-buffered instead.
+  std::setvbuf(stdout, nullptr, _IOLBF, 0);
+
   Options options;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
@@ -312,7 +317,6 @@ int main(int argc, char** argv) {
         (iteration + 1) % options.report_every == 0) {
       std::printf("iteration %llu ok\n",
                   static_cast<unsigned long long>(iteration + 1));
-      std::fflush(stdout);
     }
   }
 

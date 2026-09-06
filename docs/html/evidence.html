@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="30d45535e77f1551e8d76bcd70f97f58a6cdd5e9d730ca74e7d85ba81d38d981">
+  <meta name="tfdb-source-sha256" content="dbe3576858c1d13f3871d0fee7df757dc82d7b69b03d54a677184d2be18972c7">
   <title>Reference verification evidence — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -91,12 +91,18 @@ writer-health cases;</li>
 source cannot silently escape the gate;</li>
 <li><code>make cxx17-check</code> (new): the library, tools, examples, and tests rebuild as
 C++17 with <code>-Werror</code> and leave no <code>Status</code> unchecked;</li>
-<li><code>make fuzz</code> (new): <strong>500,000</strong> derived-image iterations against
-<code>testdata/format-v1/valid-mixed.tfdb</code> with seed 20260906, under ASan and
-UBSan, produced no crash, hang, sanitizer report, or undocumented status
-code, and saved no artifact. This is ten times the exploratory run that
-motivated the harness. It is a whole-image mutation fuzzer, not a
+<li><code>make fuzz</code> (new): <strong>5,000,000</strong> derived-image iterations against
+<code>testdata/format-v1/valid-mixed.tfdb</code> under ASan and UBSan produced no crash,
+hang, sanitizer report, or undocumented status code, and saved no artifact.
+Run as 20 shards from base seed 20260906, so the shard seeds were
+20260906 + n * 1000003 for n in 0..19, 250,000 iterations each, in 303 s
+wall clock. A single-process 500,000-iteration run at seed 20260906 passed
+the same way beforehand. This is a whole-image mutation fuzzer, not a
 coverage-guided one; that gate stays open;</li>
+<li>fuzz sharding scales as measured over 60,000 iterations on this
+20-logical-core host: 29.4 s at one job, then 2.0x, 3.6x, 6.5x, and 8.0x at
+2, 4, 10, and 20 shards. Scaling flattens past roughly half the logical
+cores because the sanitized workload is memory-bound;</li>
 <li><code>make build-system-test</code>: CMake configure/build/CTest/install and the
 installed-package CMake consumer pass; Meson configure/compile/test/install
 pass. The final Meson consumer step needs a <code>pkg-config</code> binary this host
@@ -413,7 +419,7 @@ before freezing format v1.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">30d45535e77f1551e8d76bcd70f97f58a6cdd5e9d730ca74e7d85ba81d38d981</span></p>
+        <p>Source SHA-256: <span class="source-hash">dbe3576858c1d13f3871d0fee7df757dc82d7b69b03d54a677184d2be18972c7</span></p>
       </footer>
     </main>
   </div>

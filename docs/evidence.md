@@ -59,12 +59,18 @@ and Ninja 1.13.2 from a disposable virtualenv. Reproduced on this worktree:
   source cannot silently escape the gate;
 - `make cxx17-check` (new): the library, tools, examples, and tests rebuild as
   C++17 with `-Werror` and leave no `Status` unchecked;
-- `make fuzz` (new): **500,000** derived-image iterations against
-  `testdata/format-v1/valid-mixed.tfdb` with seed 20260906, under ASan and
-  UBSan, produced no crash, hang, sanitizer report, or undocumented status
-  code, and saved no artifact. This is ten times the exploratory run that
-  motivated the harness. It is a whole-image mutation fuzzer, not a
+- `make fuzz` (new): **5,000,000** derived-image iterations against
+  `testdata/format-v1/valid-mixed.tfdb` under ASan and UBSan produced no crash,
+  hang, sanitizer report, or undocumented status code, and saved no artifact.
+  Run as 20 shards from base seed 20260906, so the shard seeds were
+  20260906 + n * 1000003 for n in 0..19, 250,000 iterations each, in 303 s
+  wall clock. A single-process 500,000-iteration run at seed 20260906 passed
+  the same way beforehand. This is a whole-image mutation fuzzer, not a
   coverage-guided one; that gate stays open;
+- fuzz sharding scales as measured over 60,000 iterations on this
+  20-logical-core host: 29.4 s at one job, then 2.0x, 3.6x, 6.5x, and 8.0x at
+  2, 4, 10, and 20 shards. Scaling flattens past roughly half the logical
+  cores because the sanitized workload is memory-bound;
 - `make build-system-test`: CMake configure/build/CTest/install and the
   installed-package CMake consumer pass; Meson configure/compile/test/install
   pass. The final Meson consumer step needs a `pkg-config` binary this host
