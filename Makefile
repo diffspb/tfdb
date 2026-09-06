@@ -93,10 +93,13 @@ coverage:
 #
 #   make fuzz                          quick regular run
 #   make fuzz FUZZ_ITERATIONS=500000   long run
+#   make fuzz FUZZ_JOBS=$$(nproc)       shard across independent processes
 #   make fuzz FUZZ_SEED=$$(date +%s)    explore a new seed
 #
-# Every finding prints its seed and iteration and saves the image; replay it
-# with: build/fuzz/tfdb_fuzz_media --image PATH
+# FUZZ_ITERATIONS is the total across shards, so changing FUZZ_JOBS changes
+# wall time rather than how much work is done. Every finding prints its seed
+# and iteration and saves the image; replay it with:
+#   build/fuzz/tfdb_fuzz_media --image PATH
 FUZZ_BUILD_DIR := build/fuzz
 FUZZ_BINARY := $(FUZZ_BUILD_DIR)/tfdb_fuzz_media
 FUZZ_CORPUS ?= testdata/format-v1/valid-mixed.tfdb
@@ -105,6 +108,7 @@ FUZZ_SEED ?= 20260906
 FUZZ_ARTIFACTS ?= $(FUZZ_BUILD_DIR)
 FUZZ_CXXFLAGS ?= -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined
 FUZZ_TIMEOUT ?= 0
+FUZZ_JOBS ?= 1
 
 $(FUZZ_BINARY): tests/fuzz_media.cpp $(LIB_SOURCES) $(wildcard include/tfdb/*.hpp)
 	@mkdir -p $(@D)
@@ -114,13 +118,11 @@ $(FUZZ_BINARY): tests/fuzz_media.cpp $(LIB_SOURCES) $(wildcard include/tfdb/*.hp
 fuzz-build: $(FUZZ_BINARY)
 
 fuzz: $(FUZZ_BINARY)
-	@mkdir -p $(FUZZ_ARTIFACTS)
-	ASAN_OPTIONS=detect_leaks=0 \
-	UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
-	$(if $(filter-out 0,$(FUZZ_TIMEOUT)),timeout $(FUZZ_TIMEOUT),) \
-	$(FUZZ_BINARY) --corpus $(FUZZ_CORPUS) \
-		--iterations $(FUZZ_ITERATIONS) --seed $(FUZZ_SEED) \
-		--artifacts $(FUZZ_ARTIFACTS)
+	FUZZ_BINARY=$(abspath $(FUZZ_BINARY)) FUZZ_CORPUS=$(FUZZ_CORPUS) \
+	FUZZ_ITERATIONS=$(FUZZ_ITERATIONS) FUZZ_SEED=$(FUZZ_SEED) \
+	FUZZ_JOBS=$(FUZZ_JOBS) FUZZ_ARTIFACTS=$(FUZZ_ARTIFACTS) \
+	FUZZ_TIMEOUT=$(FUZZ_TIMEOUT) \
+	bash tests/run_fuzz.sh
 
 crash-matrix: $(TEST_BINARY)
 	timeout 120 $(TEST_BINARY) --filter torn_tail

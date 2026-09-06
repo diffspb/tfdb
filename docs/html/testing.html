@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="6c47d4d17e433d756f9459bd326bec542b5c0016a42f67353430a557bfb4f426">
+  <meta name="tfdb-source-sha256" content="f43ccacf9a10f775d294b7e059eca9995f2afc5652b35b0468cb381d0f0631b3">
   <title>Verification and acceptance strategy — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -135,11 +135,29 @@ immediately instead of after a long clean run.</p>
 builds its own ASan/UBSan binary because the sanitizers are the detector:</p>
 <pre><code class="language-sh">make fuzz                            # quick regular run, 20,000 iterations
 make fuzz FUZZ_ITERATIONS=500000     # long run
+make fuzz FUZZ_JOBS=$(nproc)         # shard across independent processes
 make fuzz FUZZ_SEED=$(date +%s)      # explore a new seed
-make fuzz FUZZ_TIMEOUT=3600          # bound the wall clock
+make fuzz FUZZ_TIMEOUT=3600          # bound the wall clock per shard
 </code></pre>
+<p><code>FUZZ_JOBS</code> shards the run across processes rather than threads. Each shard
+gets its own seed, derived as <code>FUZZ_SEED + shard * FUZZ_SEED_STRIDE</code>, so shards
+share nothing, <code>(seed, iteration)</code> still identifies an image exactly, and a
+sanitizer abort stays contained in the shard that hit it instead of killing the
+whole run. Threads would add no throughput, because iterations already share no
+state, and would make a failure ambiguous between a defect in the library and a
+race in the harness — this fuzzer's oracle is about media decoding, not
+concurrency. Concurrent use of independent stores is safe regardless: the
+library holds no mutable global state, and its only statics are an immutable
+CRC table and immutable built-in codecs.</p>
+<p><code>FUZZ_ITERATIONS</code> is the total across shards, so changing <code>FUZZ_JOBS</code> changes
+wall time rather than how much work is done. Measured on a 20-logical-core
+WSL2 host, 60,000 iterations took 29.4 s at <code>FUZZ_JOBS=1</code> and scaled to 2.0x,
+3.6x, 6.5x, and 8.0x at 2, 4, 10, and 20 shards; scaling flattens past roughly
+half the logical cores because the sanitized workload is memory-bound.</p>
 <p>A finding prints its seed and iteration, writes the offending image under
-<code>FUZZ_ARTIFACTS</code> (default <code>build/fuzz</code>), and prints the replay command:</p>
+<code>FUZZ_ARTIFACTS</code> (default <code>build/fuzz</code>), and prints the replay command. With
+several shards, each one also names its own log, and any failing shard fails
+the whole run:</p>
 <pre><code class="language-sh">build/fuzz/tfdb_fuzz_media --image build/fuzz/tfdb-fuzz-SEED-ITERATION.tfdb
 </code></pre>
 <p>Regular use means a fixed seed on every change and a rotating seed on a
@@ -309,7 +327,7 @@ characterize its internal write amplification.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">6c47d4d17e433d756f9459bd326bec542b5c0016a42f67353430a557bfb4f426</span></p>
+        <p>Source SHA-256: <span class="source-hash">f43ccacf9a10f775d294b7e059eca9995f2afc5652b35b0468cb381d0f0631b3</span></p>
       </footer>
     </main>
   </div>

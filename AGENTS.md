@@ -62,10 +62,11 @@ make fuzz
 python3 docs/build_html.py --check
 ```
 
-`make fuzz` defaults to a short run. Before a release or format decision also
-run a long one with a fresh seed, for example
-`make fuzz FUZZ_ITERATIONS=500000 FUZZ_SEED=$(date +%s)`, and record the
-iteration count and seed in `docs/evidence.md`. A saved failing image that
+`make fuzz` defaults to a short single-process run. Before a release or format
+decision also run a long sharded one with a fresh seed, for example
+`make fuzz FUZZ_ITERATIONS=5000000 FUZZ_JOBS=$(nproc) FUZZ_SEED=$(date +%s)`,
+and record the iteration count, shard count, and base seed in
+`docs/evidence.md`. A saved failing image that
 exposes a specification gap belongs in `testdata/format-v1/` with an expected
 classification, not only in the fuzz harness.
 

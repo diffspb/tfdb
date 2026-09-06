@@ -113,12 +113,32 @@ builds its own ASan/UBSan binary because the sanitizers are the detector:
 ```sh
 make fuzz                            # quick regular run, 20,000 iterations
 make fuzz FUZZ_ITERATIONS=500000     # long run
+make fuzz FUZZ_JOBS=$(nproc)         # shard across independent processes
 make fuzz FUZZ_SEED=$(date +%s)      # explore a new seed
-make fuzz FUZZ_TIMEOUT=3600          # bound the wall clock
+make fuzz FUZZ_TIMEOUT=3600          # bound the wall clock per shard
 ```
 
+`FUZZ_JOBS` shards the run across processes rather than threads. Each shard
+gets its own seed, derived as `FUZZ_SEED + shard * FUZZ_SEED_STRIDE`, so shards
+share nothing, `(seed, iteration)` still identifies an image exactly, and a
+sanitizer abort stays contained in the shard that hit it instead of killing the
+whole run. Threads would add no throughput, because iterations already share no
+state, and would make a failure ambiguous between a defect in the library and a
+race in the harness — this fuzzer's oracle is about media decoding, not
+concurrency. Concurrent use of independent stores is safe regardless: the
+library holds no mutable global state, and its only statics are an immutable
+CRC table and immutable built-in codecs.
+
+`FUZZ_ITERATIONS` is the total across shards, so changing `FUZZ_JOBS` changes
+wall time rather than how much work is done. Measured on a 20-logical-core
+WSL2 host, 60,000 iterations took 29.4 s at `FUZZ_JOBS=1` and scaled to 2.0x,
+3.6x, 6.5x, and 8.0x at 2, 4, 10, and 20 shards; scaling flattens past roughly
+half the logical cores because the sanitized workload is memory-bound.
+
 A finding prints its seed and iteration, writes the offending image under
-`FUZZ_ARTIFACTS` (default `build/fuzz`), and prints the replay command:
+`FUZZ_ARTIFACTS` (default `build/fuzz`), and prints the replay command. With
+several shards, each one also names its own log, and any failing shard fails
+the whole run:
 
 ```sh
 build/fuzz/tfdb_fuzz_media --image build/fuzz/tfdb-fuzz-SEED-ITERATION.tfdb
