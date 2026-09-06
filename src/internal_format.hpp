@@ -135,6 +135,8 @@ std::uint32_t crc32c_update(std::uint32_t state, ByteView bytes);
 std::uint32_t crc32c_finish(std::uint32_t state);
 std::uint32_t crc32c(ByteView bytes);
 // Checksums bytes[0, size) with the four bytes at crc_offset treated as zero.
+// The caller must have established crc_offset + 4 <= bytes.size(); this helper
+// reads the whole span and does not re-check it.
 std::uint32_t crc32c_with_zeroed_field(ByteView bytes, std::size_t crc_offset);
 std::uint64_t align_up(std::uint64_t value, std::uint32_t quantum,
                        bool* overflow = nullptr);
