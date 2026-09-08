@@ -80,9 +80,11 @@ has one writer and no priority scheduler. The async wrapper reports queue
 backpressure and accepted-to-durable latency.
 
 Text and template logs often compress well with dictionary/match codecs. The
-dependency-free v1 PackBits codec only captures adjacent equal-byte runs and
-barely changed the reference log workload, so it must not be used to predict a
-general text-compression gain. Binary attachments and already compressed
+v1 PackBits codec only captures adjacent equal-byte runs and barely changed the
+reference log workload, so it must not be used to predict a general
+text-compression gain; `lz4_block:1` is the built-in match codec, and its gain
+is likewise a property of the payload and must be measured on real logs rather
+than assumed. Binary attachments and already compressed
 payloads usually do not compress; TFDB's per-block raw fallback avoids
 expansion. Large attachments should normally live in a separate record/profile
 or store so a single item cannot dominate block and retention sizing.

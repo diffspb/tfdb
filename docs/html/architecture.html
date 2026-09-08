@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="8b7b33c60b0a11c277f8ac8d787301be2c6c76f406d0726a2c3906d3d7dd3251">
+  <meta name="tfdb-source-sha256" content="1c4afcba652e84a4608fb7d10a10570c38b31fe9aeed579e02b33f0e0db01730">
   <title>TFDB architecture — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -349,10 +349,11 @@ optional secondary index without altering the ring format.</p>
 <p>Logs and telemetry may share a volume only when retention, privacy, and load
 policies match. Separate partitions per type are not supported inside one ring;
 separate volumes are simpler when log bursts must not evict safety telemetry.</p>
-<p>Text logs often compress well with dictionary/match codecs such as LZ4 or Zstd,
-but the v1 PackBits baseline only helps adjacent equal-byte runs and reduced
-the reference log workload by only about 2%. Logs can also contain already-
-compressed blobs or secrets. Compression is partition-local and optional.
+<p>Text logs often compress well with dictionary/match codecs. The v1 PackBits
+baseline only helps adjacent equal-byte runs and reduced the reference log
+workload by only about 2%; <code>lz4_block:1</code> is the built-in match codec for that
+case. Logs can also contain already-compressed blobs or secrets. Compression is
+partition-local and optional.
 Encryption and tamper authentication are intentionally outside format v1; CRC
 is not a security mechanism.</p>
 <p>The implemented <code>FramedRecordV1</code> is a practical envelope for text logs. A
@@ -398,7 +399,7 @@ controller, cache, and flash stack.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">8b7b33c60b0a11c277f8ac8d787301be2c6c76f406d0726a2c3906d3d7dd3251</span></p>
+        <p>Source SHA-256: <span class="source-hash">1c4afcba652e84a4608fb7d10a10570c38b31fe9aeed579e02b33f0e0db01730</span></p>
       </footer>
     </main>
   </div>

@@ -16,7 +16,7 @@ namespace tfdb {
 enum class CompressionId : std::uint16_t {
   none = 0,
   packbits = 1,
-  lz4_block = 2  // Reserved; not implemented by the dependency-free core.
+  lz4_block = 2  // TFDB LZ4 block v1; see docs/format-v1.md section 6.
 };
 
 class CompressionCodec {
@@ -36,6 +36,7 @@ class CompressionCodec {
 
 std::shared_ptr<const CompressionCodec> no_compression_codec();
 std::shared_ptr<const CompressionCodec> packbits_codec();
+std::shared_ptr<const CompressionCodec> lz4_block_codec();
 std::shared_ptr<const CompressionCodec> built_in_codec(CompressionId id);
 
 }  // namespace tfdb

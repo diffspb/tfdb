@@ -6,7 +6,8 @@ use std::path::PathBuf;
 
 use tfdb_reader::{
     decode_block_header, decode_footer, decode_framed_v1, decode_index_entry,
-    decode_partition_header, decode_volume_header, decompress_packbits, Event, Reader,
+    decode_partition_header, decode_volume_header, decompress_lz4_block, decompress_packbits,
+    Event, Reader,
 };
 
 fn corpus() -> PathBuf {
@@ -99,7 +100,30 @@ fn arbitrary_bounded_inputs_do_not_panic() {
             let _ = decode_footer(&bytes);
             let _ = decode_framed_v1(&bytes);
             let _ = decompress_packbits(&bytes, trial % 512);
+            let _ = decompress_lz4_block(&bytes, trial % 512);
         });
         assert!(result.is_ok(), "decoder panicked on trial {trial}");
+    }
+}
+
+/// Every truncation of a valid LZ4 stream must be rejected, and every
+/// single-bit mutation must either fail or produce exactly the length the
+/// block header declared. A corrupt stream that decoded to some other length
+/// would mean the decoder trusted the stream over the header.
+#[test]
+fn lz4_block_truncation_and_mutation_stay_bounded() {
+    // One literal, a distance-one match of fourteen bytes, then the five
+    // mandatory last literals: the normative twenty-byte run vector.
+    let valid = [0x1a, b'a', 0x01, 0x00, 0x50, b'a', b'a', b'a', b'a', b'a'];
+    assert_eq!(decompress_lz4_block(&valid, 20).unwrap(), vec![b'a'; 20]);
+    every_truncation_is_rejected(&valid, |bytes| decompress_lz4_block(bytes, 20).is_ok());
+    for offset in 0..valid.len() {
+        for bit in 0..8 {
+            let mut mutated = valid;
+            mutated[offset] ^= 1 << bit;
+            if let Ok(output) = decompress_lz4_block(&mutated, 20) {
+                assert_eq!(output.len(), 20, "byte {offset} bit {bit}");
+            }
+        }
     }
 }

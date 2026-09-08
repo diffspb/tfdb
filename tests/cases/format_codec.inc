@@ -414,6 +414,8 @@ TEST(public_codecs_and_profiles_reject_invalid_byte_views) {
       tfdb::no_compression_codec();
   const std::shared_ptr<const tfdb::CompressionCodec> packbits =
       tfdb::packbits_codec();
+  const std::shared_ptr<const tfdb::CompressionCodec> lz4 =
+      tfdb::lz4_block_codec();
   REQUIRE(none->compress(invalid, &output).code() ==
           tfdb::StatusCode::invalid_argument);
   REQUIRE(none->decompress(invalid, 1, &output).code() ==
@@ -421,6 +423,18 @@ TEST(public_codecs_and_profiles_reject_invalid_byte_views) {
   REQUIRE(packbits->compress(invalid, &output).code() ==
           tfdb::StatusCode::invalid_argument);
   REQUIRE(packbits->decompress(invalid, 1, &output).code() ==
+          tfdb::StatusCode::invalid_argument);
+  REQUIRE(lz4->compress(invalid, &output).code() ==
+          tfdb::StatusCode::invalid_argument);
+  REQUIRE(lz4->decompress(invalid, 1, &output).code() ==
+          tfdb::StatusCode::invalid_argument);
+  REQUIRE(none->compress(tfdb::ByteView(), nullptr).code() ==
+          tfdb::StatusCode::invalid_argument);
+  REQUIRE(packbits->compress(tfdb::ByteView(), nullptr).code() ==
+          tfdb::StatusCode::invalid_argument);
+  REQUIRE(lz4->compress(tfdb::ByteView(), nullptr).code() ==
+          tfdb::StatusCode::invalid_argument);
+  REQUIRE(lz4->decompress(tfdb::ByteView(), 0, nullptr).code() ==
           tfdb::StatusCode::invalid_argument);
   REQUIRE(tfdb::FramedRecordV1::encode(0, 0, 0, invalid, &output).code() ==
           tfdb::StatusCode::invalid_argument);
@@ -448,6 +462,15 @@ TEST(public_encoders_support_aliased_input_and_output) {
   REQUIRE_OK(packbits->decompress(tfdb::ByteView(raw), expected_raw.size(),
                                   &raw));
   REQUIRE(raw == expected_raw);
+
+  const std::shared_ptr<const tfdb::CompressionCodec> lz4 =
+      tfdb::lz4_block_codec();
+  raw.assign(20, 0x61);
+  const std::vector<std::uint8_t> expected_lz4 = raw;
+  REQUIRE_OK(lz4->compress(tfdb::ByteView(raw), &raw));
+  REQUIRE(raw == from_hex("1a610100506161616161"));
+  REQUIRE_OK(lz4->decompress(tfdb::ByteView(raw), expected_lz4.size(), &raw));
+  REQUIRE(raw == expected_lz4);
 
   std::vector<std::uint8_t> framed_payload = {'a', 'l', 'i', 'a', 's'};
   const std::vector<std::uint8_t> expected_payload = framed_payload;
@@ -496,6 +519,226 @@ TEST(packbits_v1_normative_and_malformed_vectors) {
   rejects({0x80}, 3);
   rejects({0x80, 1}, 2);
   rejects({0, 1, 0, 2}, 1);
+}
+
+TEST(lz4_block_v1_normative_and_malformed_vectors) {
+  const std::shared_ptr<const tfdb::CompressionCodec> codec =
+      tfdb::lz4_block_codec();
+  REQUIRE(codec->id() == tfdb::CompressionId::lz4_block);
+  REQUIRE_EQ(codec->version(), 1u);
+  REQUIRE(tfdb::built_in_codec(tfdb::CompressionId::lz4_block) == codec);
+
+  const auto encodes_as = [&](const std::vector<std::uint8_t>& input,
+                              const std::vector<std::uint8_t>& expected) {
+    std::vector<std::uint8_t> encoded, decoded;
+    REQUIRE_OK(codec->compress(tfdb::ByteView(input), &encoded));
+    REQUIRE(encoded == expected);
+    REQUIRE(encoded.size() <= codec->max_compressed_size(input.size()));
+    REQUIRE_OK(codec->decompress(tfdb::ByteView(encoded), input.size(),
+                                 &decoded));
+    REQUIRE(decoded == input);
+  };
+  // Empty input is the single empty-literal token, matching what a stock LZ4
+  // encoder emits; the decoder also accepts the empty stream for raw size 0.
+  encodes_as({}, {0x00});
+  encodes_as({0x61}, {0x10, 0x61});
+  // Thirteen bytes is the smallest input in which a match may start, and the
+  // parsing restrictions still leave no room for one, so it stays literal.
+  encodes_as(std::vector<std::uint8_t>(13, 0x61),
+             from_hex("d061616161616161616161616161"));
+  // Twenty bytes: one literal, a distance-one match of fourteen bytes that
+  // repeats the overlapping window, then the five mandatory last literals.
+  encodes_as(std::vector<std::uint8_t>(20, 0x61),
+             from_hex("1a610100506161616161"));
+
+  // Both length nibbles saturated: twenty literals, a four-byte match at
+  // distance twenty, then a thirty-one byte match at distance four.
+  std::vector<std::uint8_t> extended;
+  for (unsigned i = 0; i != 20; ++i)
+    extended.push_back(static_cast<std::uint8_t>(i));
+  for (unsigned i = 0; i != 40; ++i)
+    extended.push_back(static_cast<std::uint8_t>(i % 4));
+  encodes_as(extended, from_hex(
+      "f005000102030405060708090a0b0c0d0e0f1011121314000f04000c500300010203"));
+
+  const auto rejects = [&](const std::vector<std::uint8_t>& input,
+                           std::size_t expected_size) {
+    std::vector<std::uint8_t> output;
+    REQUIRE(codec->decompress(tfdb::ByteView(input), expected_size,
+                              &output).code() == tfdb::StatusCode::corrupt);
+  };
+  const std::vector<std::uint8_t> valid = from_hex("1a610100506161616161");
+  // A zero offset is invalid per the LZ4 block format. Permissive decoders
+  // copy a byte onto itself and hand back plausible garbage instead.
+  rejects(from_hex("1a610000506161616161"), 20);
+  // An offset reaching before the first decoded byte.
+  rejects(from_hex("1a610900506161616161"), 20);
+  // A final token that announces a match whose offset was never stored.
+  rejects(from_hex("1a610100516161616161"), 20);
+  // Truncated offset and truncated literals.
+  rejects(from_hex("1a6101"), 20);
+  rejects(from_hex("5061"), 20);
+  // Output shorter and longer than the block header declared.
+  rejects(valid, 19);
+  rejects(valid, 21);
+  rejects(from_hex("206162"), 1);
+  // The LZ4 parsing restrictions: a match may not end inside the last five
+  // bytes, nor start less than twelve bytes before the end.
+  rejects(from_hex("1061010000"), 5);
+  rejects(from_hex("506162636465010050767778797a"), 14);
+  // An extended length that never terminates before the input does.
+  rejects(from_hex("f0ffff"), 4096);
+  // The empty stream decodes only to an empty block.
+  rejects({}, 1);
+}
+
+TEST(lz4_block_v1_round_trip_determinism_and_bounds) {
+  const std::shared_ptr<const tfdb::CompressionCodec> codec =
+      tfdb::lz4_block_codec();
+  std::vector<std::vector<std::uint8_t>> inputs;
+  inputs.push_back(std::vector<std::uint8_t>());
+  // Every length across the thirteen-byte match threshold and the sixteen-byte
+  // window the encoder needs before a length nibble saturates.
+  for (std::size_t size = 1; size <= 40; ++size)
+    inputs.push_back(std::vector<std::uint8_t>(size, 0x5a));
+
+  // The block payload limit used throughout the tests, and its neighbours.
+  std::mt19937 random(0x14b10cu);
+  const std::size_t edges[] = {255, 256, 257, 4095, 4096, 4097, 65535, 65536};
+  for (std::size_t edge : edges) {
+    std::vector<std::uint8_t> compressible(edge, 0x00);
+    for (std::size_t i = 0; i != edge; ++i)
+      compressible[i] = static_cast<std::uint8_t>((i / 7) % 3);
+    inputs.push_back(compressible);
+    std::vector<std::uint8_t> incompressible(edge);
+    for (std::uint8_t& byte : incompressible)
+      byte = static_cast<std::uint8_t>(random());
+    inputs.push_back(incompressible);
+  }
+  // A match longer than the sixty-five kilobyte window can reach back.
+  std::vector<std::uint8_t> distant(70000);
+  for (std::size_t i = 0; i != distant.size(); ++i)
+    distant[i] = static_cast<std::uint8_t>(random());
+  distant.insert(distant.end(), distant.begin(), distant.end());
+  inputs.push_back(distant);
+
+  for (const std::vector<std::uint8_t>& input : inputs) {
+    std::vector<std::uint8_t> encoded, again, decoded;
+    REQUIRE_OK(codec->compress(tfdb::ByteView(input), &encoded));
+    REQUIRE(encoded.size() <= codec->max_compressed_size(input.size()));
+    // The corpus is compared byte for byte, so the encoder must be a pure
+    // function of its input: no addresses, no clock, no residual state.
+    REQUIRE_OK(codec->compress(tfdb::ByteView(input), &again));
+    REQUIRE(encoded == again);
+    REQUIRE_OK(tfdb::built_in_codec(tfdb::CompressionId::lz4_block)
+                   ->compress(tfdb::ByteView(input), &again));
+    REQUIRE(encoded == again);
+    REQUIRE_OK(codec->decompress(tfdb::ByteView(encoded), input.size(),
+                                 &decoded));
+    REQUIRE(decoded == input);
+    // Every truncation of a valid stream loses output the block header still
+    // demands, so none of them may decode. Empty input is the one exception:
+    // its stream truncates to the empty stream, which is a valid encoding of
+    // an empty block.
+    if (!input.empty() && encoded.size() <= 512) {
+      for (std::size_t length = 0; length != encoded.size(); ++length) {
+        std::vector<std::uint8_t> output;
+        REQUIRE(!codec->decompress(tfdb::ByteView(encoded.data(), length),
+                                   input.size(), &output).ok());
+      }
+    }
+  }
+
+  // A payload the encoder cannot shrink still round-trips; the block layer,
+  // not the codec, is what declines to store the larger form.
+  std::vector<std::uint8_t> noise(4096);
+  for (std::uint8_t& byte : noise) byte = static_cast<std::uint8_t>(random());
+  std::vector<std::uint8_t> encoded, decoded;
+  REQUIRE_OK(codec->compress(tfdb::ByteView(noise), &encoded));
+  REQUIRE(encoded.size() > noise.size());
+  REQUIRE_OK(codec->decompress(tfdb::ByteView(encoded), noise.size(),
+                               &decoded));
+  REQUIRE(decoded == noise);
+}
+
+TEST(lz4_block_v1_decoder_survives_mutation_and_arbitrary_input) {
+  const std::shared_ptr<const tfdb::CompressionCodec> codec =
+      tfdb::lz4_block_codec();
+  std::vector<std::uint8_t> input(600);
+  for (std::size_t i = 0; i != input.size(); ++i)
+    input[i] = static_cast<std::uint8_t>((i / 5) % 11);
+  std::vector<std::uint8_t> encoded;
+  REQUIRE_OK(codec->compress(tfdb::ByteView(input), &encoded));
+
+  // Every single-bit corruption either fails or yields exactly the declared
+  // size. A corrupt stream that decoded into a different length would mean the
+  // decoder trusted the stream over the block header.
+  for (std::size_t offset = 0; offset != encoded.size(); ++offset) {
+    for (unsigned bit = 0; bit != 8; ++bit) {
+      std::vector<std::uint8_t> mutated = encoded;
+      mutated[offset] ^= static_cast<std::uint8_t>(1u << bit);
+      std::vector<std::uint8_t> output;
+      const tfdb::Status status = codec->decompress(
+          tfdb::ByteView(mutated), input.size(), &output);
+      if (status.ok()) REQUIRE_EQ(output.size(), input.size());
+      else REQUIRE(status.code() == tfdb::StatusCode::corrupt);
+    }
+  }
+
+  // Arbitrary bytes against an arbitrary declared size must stay inside both
+  // buffers and never report success with the wrong length.
+  std::mt19937 random(0x10c4dec);
+  for (unsigned trial = 0; trial != 20000; ++trial) {
+    const std::size_t size = random() % 96;
+    std::vector<std::uint8_t> bytes(size);
+    for (std::uint8_t& byte : bytes)
+      byte = static_cast<std::uint8_t>(random());
+    const std::size_t expected = random() % 4096;
+    std::vector<std::uint8_t> output;
+    const tfdb::Status status = codec->decompress(
+        tfdb::ByteView(bytes), expected, &output);
+    if (status.ok()) REQUIRE_EQ(output.size(), expected);
+  }
+}
+
+TEST(lz4_block_partition_stores_compressed_and_incompressible_blocks) {
+  Fixture fixture(64u * 1024u, 4096, 512);
+  fixture.partition.compression = tfdb::CompressionId::lz4_block;
+  fixture.partition.compression_version = 1;
+  fixture.open(true);
+
+  const std::vector<std::uint8_t> compressible(3000, 0x2a);
+  std::vector<std::uint8_t> incompressible(3000);
+  std::mt19937 random(0xfeed4);
+  for (std::uint8_t& byte : incompressible)
+    byte = static_cast<std::uint8_t>(random());
+  REQUIRE_OK(fixture.store->append(tfdb::ByteView(compressible), 1));
+  REQUIRE_OK(fixture.store->checkpoint());
+  REQUIRE_OK(fixture.store->append(tfdb::ByteView(incompressible), 2));
+  REQUIRE_OK(fixture.store->checkpoint());
+  REQUIRE_OK(fixture.store->close());
+  fixture.store.reset();
+
+  fixture.open(false);
+  std::vector<tfdb::CompressionId> codecs;
+  std::vector<std::vector<std::uint8_t>> payloads;
+  REQUIRE_OK(fixture.store->scan_blocks(tfdb::QueryOptions(),
+      [&](const tfdb::BlockEvent& event) {
+        if (event.kind == tfdb::BlockEventKind::data) {
+          codecs.push_back(event.metadata.compression);
+          payloads.push_back(std::vector<std::uint8_t>(
+              event.data.data(), event.data.data() + event.data.size()));
+        }
+        return true;
+      }));
+  REQUIRE_EQ(payloads.size(), 2u);
+  REQUIRE(payloads[0] == compressible);
+  REQUIRE(payloads[1] == incompressible);
+  // The compressible block keeps the configured codec; the block the codec
+  // could not shrink declares itself uncompressed instead of paying for the
+  // larger form.
+  REQUIRE(codecs[0] == tfdb::CompressionId::lz4_block);
+  REQUIRE(codecs[1] == tfdb::CompressionId::none);
 }
 
 TEST(format_headers_and_geometry_round_trip) {

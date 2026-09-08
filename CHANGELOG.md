@@ -16,6 +16,10 @@ separate: format v1 remains a candidate until the qualification gates in
 - reproducible sanitizer-backed media fuzzer with process sharding;
 - reproducible shared feature/bounds, stale-writer, and live-rotation corpus
   images with SHA-256 protection;
+- `lz4_block:1`, the LZ4 raw block format, in both the C++ writer/reader and
+  the Rust reader, with a normative byte grammar, a shared corpus image, and a
+  codec stage in the media fuzzer; the reserved compression ID 2 is now
+  assigned rather than reserved;
 - BSD-2-Clause license and explicit project attribution.
 
 ### Changed

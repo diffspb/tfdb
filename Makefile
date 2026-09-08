@@ -108,7 +108,8 @@ coverage:
 #   build/fuzz/tfdb_fuzz_media --image PATH
 FUZZ_BUILD_DIR := build/fuzz
 FUZZ_BINARY := $(FUZZ_BUILD_DIR)/tfdb_fuzz_media
-FUZZ_CORPUS ?= testdata/format-v1/valid-mixed.tfdb
+FUZZ_CORPUS ?= testdata/format-v1/valid-mixed.tfdb \
+                testdata/format-v1/codec-lz4-block.tfdb
 FUZZ_ITERATIONS ?= 20000
 FUZZ_SEED ?= 20260906
 FUZZ_ARTIFACTS ?= $(FUZZ_BUILD_DIR)
@@ -124,7 +125,7 @@ $(FUZZ_BINARY): tests/fuzz_media.cpp $(LIB_SOURCES) $(wildcard include/tfdb/*.hp
 fuzz-build: $(FUZZ_BINARY)
 
 fuzz: $(FUZZ_BINARY)
-	FUZZ_BINARY=$(abspath $(FUZZ_BINARY)) FUZZ_CORPUS=$(FUZZ_CORPUS) \
+	FUZZ_BINARY=$(abspath $(FUZZ_BINARY)) FUZZ_CORPUS="$(FUZZ_CORPUS)" \
 	FUZZ_ITERATIONS=$(FUZZ_ITERATIONS) FUZZ_SEED=$(FUZZ_SEED) \
 	FUZZ_JOBS=$(FUZZ_JOBS) FUZZ_ARTIFACTS=$(FUZZ_ARTIFACTS) \
 	FUZZ_TIMEOUT=$(FUZZ_TIMEOUT) \

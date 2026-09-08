@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="d750a8a9ee5e5ad98b6917fe2f100ee8f3629741a62a65945e1eb5cc3b81e3e2">
+  <meta name="tfdb-source-sha256" content="0fad2038b98aee0fc4689a195d9073e927015b9252208e271dce23eb56084767">
   <title>TFDB media format v1 (candidate) — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -428,7 +428,7 @@ durable before any record is accepted into that partition.</p>
 <tr>
 <td style="text-align:right">1 compression</td>
 <td style="text-align:center">yes</td>
-<td style="text-align:right"><code>0</code> none, <code>1</code> TFDB PackBits</td>
+<td style="text-align:right"><code>0</code> none, <code>1</code> TFDB PackBits, <code>2</code> TFDB LZ4 block</td>
 <td style="text-align:right">1</td>
 <td>no region/config</td>
 </tr>
@@ -633,6 +633,105 @@ are split at 130 bytes, and literal groups are split at 128 bytes or before the
 next run of three. Empty codec input encodes empty, although a TFDB data block
 itself is never empty. The writer uses PackBits bytes only when their length is
 strictly less than raw input; otherwise the block codec is <code>none</code>.</p>
+<h3 id="tfdb-lz4-block-v1-byte-grammar">TFDB LZ4 block v1 byte grammar</h3>
+<p>The stored stream is the <a href="https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md" rel="noopener noreferrer">LZ4 raw block
+format</a> carried
+directly in the block payload. TFDB deliberately takes the block format and not
+the LZ4 frame format: a frame would repeat the magic, the flags, and the
+decompressed size that the TFDB block header already carries, and it is a
+little larger in practice. Everything the decoder needs comes from the block
+header, which CRC32C has already validated: <code>stored_size</code> bounds the input and
+<code>raw_size</code> bounds the output exactly.</p>
+<p>The stream is a sequence of sequences and contains no terminator, no magic, and
+no checksum of its own. Each sequence is:</p>
+<ul>
+<li>one token byte: the high nibble is a literal length, the low nibble a match
+length;</li>
+<li>if the literal nibble is <code>15</code>, additional bytes, each adding its value, the
+run ending at the first byte below <code>255</code>;</li>
+<li>that many literal bytes, copied to the output;</li>
+<li>a two-byte little-endian match offset, counted back from the current end of
+the output;</li>
+<li>if the match nibble is <code>15</code>, additional bytes read the same way;</li>
+<li>a match of <code>match nibble + 4</code> bytes copied from the offset. The copy is
+byte at a time: an offset smaller than the match length repeats the
+overlapping window, which is how a byte or word run is encoded.</li>
+</ul>
+<p>The final sequence stops after its literals: no offset, no match.</p>
+<p>A v1 decoder is bounded by <code>raw_size</code> and rejects, without reading or writing
+outside either buffer:</p>
+<ul>
+<li>a literal run or match that would pass the end of the stored stream, or that
+the remaining <code>raw_size</code> cannot hold;</li>
+<li>an extended length whose <code>255</code> run reaches the end of the stored stream, or
+whose total already exceeds <code>raw_size</code>;</li>
+<li>a match offset of zero, or one larger than the number of bytes decoded so
+far;</li>
+<li>a final token whose match nibble is nonzero, which announces a match whose
+offset was never stored;</li>
+<li>a final output size other than <code>raw_size</code>.</li>
+</ul>
+<p>Two of those are stricter than a permissive LZ4 decoder, deliberately. Offset
+zero is invalid in the LZ4 specification, but a decoder that computes
+<code>output - 0</code> copies bytes onto themselves and returns plausible garbage instead
+of failing; TFDB treats damage that decodes as worse than damage that stops. A
+nonzero match nibble on the final token is likewise a grammar violation that
+permissive decoders ignore.</p>
+<p>A v1 decoder also enforces the two LZ4 parsing restrictions, which every
+conforming encoder honors, so any stream TFDB accepts a stock LZ4 decoder also
+accepts: the last five bytes of the block are literals, and the last match
+starts at least twelve bytes before the end. Both are checked against
+<code>raw_size</code> once the stream ends and only when the stream contains a match.</p>
+<p>The v1 encoder is canonical. It searches with a single 4096-entry hash table of
+four-byte sequences, keeps no match chains and does no lazy matching, takes the
+first candidate within the 65535-byte window whose four bytes match, and
+extends it as far as the parsing restrictions allow. It emits a match only from
+a position at least thirteen bytes before the end and never lets a match reach
+into the last five bytes, so its output satisfies the restrictions above with a
+byte to spare. Everything the search consults is a byte value or an input
+offset, never an address, a clock, or the host word order, so one input yields
+one byte-identical output on every supported platform and in every build.
+Empty codec input encodes as the single token <code>0x00</code>, which is what a stock LZ4
+encoder emits, although a TFDB data block itself is never empty. As with
+PackBits, the writer uses LZ4 bytes only when their length is strictly less
+than the raw input; otherwise the block codec is <code>none</code>, which is why a
+partition configured for <code>lz4_block:1</code> may contain <code>none:1</code> blocks.</p>
+<p>Normative vectors, raw input to stored stream:</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">Raw</th>
+<th scope="col">Stored</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(empty)</td>
+<td><code>00</code></td>
+</tr>
+<tr>
+<td><code>61</code></td>
+<td><code>1061</code></td>
+</tr>
+<tr>
+<td><code>61</code> × 13</td>
+<td><code>d0</code> followed by <code>61</code> × 13</td>
+</tr>
+<tr>
+<td><code>61</code> × 20</td>
+<td><code>1a610100506161616161</code></td>
+</tr>
+<tr>
+<td><code>000102</code>…<code>13</code> then <code>00010203</code> × 10</td>
+<td><code>f005000102030405060708090a0b0c0d0e0f1011121314000f04000c500300010203</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>The third row is the largest input that cannot be compressed at all: below
+thirteen bytes the parsing restrictions leave no position at which a match may
+start. The fourth is one literal, a fourteen-byte match at offset one that
+repeats the overlapping window, then the five mandatory last literals. The
+fifth saturates both length nibbles.</p>
 <p>Current flags are:</p>
 <div class="table-wrap"><table class="data-table">
 <thead>
@@ -963,7 +1062,7 @@ count, and then apply time and selector filtering in physical order.</p>
 <ul>
 <li>compression 0: none v1;</li>
 <li>compression 1: TFDB PackBits v1;</li>
-<li>compression 2: reserved for a reviewed LZ4 block codec, not implemented;</li>
+<li>compression 2: TFDB LZ4 block v1, the LZ4 raw block format;</li>
 <li>time index 1: per-block signed min/max v1;</li>
 <li>integrity 1: CRC32C v1;</li>
 <li>record profile <code>0x5446444252465631</code>: FramedRecordV1.</li>
@@ -975,7 +1074,7 @@ guessed.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">d750a8a9ee5e5ad98b6917fe2f100ee8f3629741a62a65945e1eb5cc3b81e3e2</span></p>
+        <p>Source SHA-256: <span class="source-hash">0fad2038b98aee0fc4689a195d9073e927015b9252208e271dce23eb56084767</span></p>
       </footer>
     </main>
   </div>

@@ -276,7 +276,7 @@ calls. Counters measure reported transferred bytes, not physical NAND writes.
 |---|---:|---|
 | `none` | 0 | built in |
 | `packbits` | 1 | built in, dependency-free |
-| `lz4_block` | 2 | reserved; not implemented by the core |
+| `lz4_block` | 2 | built in, dependency-free; LZ4 raw block format |
 
 ### `class CompressionCodec`
 
@@ -296,15 +296,23 @@ exactly `expected_size`; TFDB rejects a mismatch.
 Codec methods must not throw when they may run on the async worker; report
 extension failures with `Status`. The input view may refer to the current
 contents of `*output`; consume it before changing output or build into a
-temporary vector and swap. Both built-in codecs support aliased input/output.
+temporary vector and swap. All built-in codecs support aliased input/output.
 
 Factory functions:
 
 ```cpp
 std::shared_ptr<const CompressionCodec> no_compression_codec();
 std::shared_ptr<const CompressionCodec> packbits_codec();
+std::shared_ptr<const CompressionCodec> lz4_block_codec();
 std::shared_ptr<const CompressionCodec> built_in_codec(CompressionId id);
 ```
+
+`packbits_codec()` captures adjacent equal-byte runs; `lz4_block_codec()`
+additionally finds repeated byte sequences within a 65535-byte window and is
+usually the better default for payloads that are not already compressed. Both
+encoders are deterministic: one input yields one byte-identical output on every
+supported platform. Their exact byte grammars are normative in
+`docs/format-v1.md` section 6.
 
 When compression is configured, TFDB stores a block compressed only if the
 result is smaller; otherwise that block uses `CompressionId::none`.

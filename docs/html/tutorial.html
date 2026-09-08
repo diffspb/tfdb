@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="1578c33c6c1a72d78bcb6ceb285b32940a789efe60d3735aebbf7bfcf2fc75d5">
+  <meta name="tfdb-source-sha256" content="6e49ee41d5c514e9f7fb301938df65a09b27a7355b12405b0b59efc379fc3212">
   <title>TFDB integration tutorial — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -389,11 +389,14 @@ index/footer, then starts the requested configuration immediately.</li>
 Use <code>submit_checked()</code> with the contract attached to each queued record; a
 stale record then fails explicitly instead of being written under the wrong
 profile or time domain.</p>
-<p>The built-in dependency-free codecs are <code>none</code> and PackBits. Compression is
-selected per block only when the compressed representation is smaller. The
-<code>lz4_block</code> identifier is reserved but has no built-in implementation; supply
-a matching <code>CompressionCodec</code> in <code>OpenOptions::compression_codecs</code> before
-opening media that uses an external codec.</p>
+<p>The built-in dependency-free codecs are <code>none</code>, PackBits, and LZ4 raw block.
+Compression is selected per block only when the compressed representation is
+smaller, so a payload the codec cannot shrink costs processor time but never
+bytes. PackBits only finds adjacent equal-byte runs; <code>lz4_block</code> also finds
+repeated byte sequences and is usually the better choice unless the payload is
+already compressed. For any other codec, supply a matching <code>CompressionCodec</code>
+in <code>OpenOptions::compression_codecs</code> before opening the media, and register its
+ID, version, and byte specification before treating that media as portable.</p>
 <h2 id="11-store-application-logs">11. Store application logs</h2>
 <p>Treat logs as structured records rather than an unbounded text stream. A
 selector can encode service, severity, or schema; the payload can contain the
@@ -516,7 +519,7 @@ operational telemetry.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">1578c33c6c1a72d78bcb6ceb285b32940a789efe60d3735aebbf7bfcf2fc75d5</span></p>
+        <p>Source SHA-256: <span class="source-hash">6e49ee41d5c514e9f7fb301938df65a09b27a7355b12405b0b59efc379fc3212</span></p>
       </footer>
     </main>
   </div>

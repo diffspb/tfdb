@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="033ad0240d07f93954fcf8ec4ede4a69eb518768d447ca1a3bb9b95cad7e2fdf">
+  <meta name="tfdb-source-sha256" content="36f8d6bac464306ae04ae6cf171e8566188af01208306ee016dd558535e3b8cb">
   <title>Reference verification evidence — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -39,6 +39,122 @@
       <h1 id="reference-verification-evidence">Reference verification evidence</h1>
 <p>This file records reproducible software evidence for the current C++14
 candidate. It is not a production eMMC/NAND qualification certificate.</p>
+<h2 id="lz4-block-codec-evidence-2026-09-09-branch-feature-lz4-block-codec">LZ4 block codec evidence (2026-09-09, branch feature/lz4-block-codec)</h2>
+<p>These checks ran on the same WSL2 kernel family with g++ 13.3.0 and
+rustc/cargo 1.98.1. They cover <code>lz4_block:1</code>, the LZ4 raw block format now
+implemented behind the existing <code>CompressionCodec</code> interface in the C++ writer
+and reader and decode-only in the Rust reader.</p>
+<ul>
+<li>The C++ suite is 85/85 (was 81/81). The four added tests cover the normative
+byte vectors and the malformed streams the grammar rejects, round trips over
+every size across the thirteen-byte match threshold plus payload-limit
+neighbours and a match beyond the 65535-byte window, encoder determinism
+across repeated calls and factory instances, every truncation and every
+single-bit mutation of a valid stream, 20,000 arbitrary bounded inputs, and a
+partition that stores both compressed and incompressible blocks.</li>
+<li>The Rust crate runs 21 tests (was 17). The added ones decode the shared
+<code>lz4_block:1</code> image to the exact payloads the C++ writer compressed, and hold
+the decoder to every truncation and single-bit mutation of a valid stream.</li>
+<li>The shared corpus is 20 manifest cases over 12 committed images. The added
+<code>codec-lz4-block.tfdb</code> carries four blocks: a 2000-byte run stored in 18
+bytes, an extended-literal payload stored in 59, a 1500-byte cyclic payload
+stored in 275, and a pseudo-random payload the codec could not shrink, which
+stores itself as <code>none:1</code> inside the compressed partition. <code>make conformance</code>
+regenerates it byte for byte and both readers produce identical block output.
+<code>codec-unknown-version.tfdb</code> is the same volume claiming <code>lz4_block:2</code>; both
+readers call it unsupported at open rather than assume version 1 is close
+enough.</li>
+<li>The encoder's output is byte-identical across <code>-O0</code>, <code>-O2</code>, <code>-O3</code>,
+<code>-fno-inline</code>, and an ASan/UBSan build: each regenerates
+<code>codec-lz4-block.tfdb</code> byte for byte. A 32-bit build was not exercised here
+for lack of multilib headers, which is precisely the divergence that ruled
+out the reference encoder, so the property is carried by construction: the
+search reads four bytes little-endian by explicit shifts and indexes a table
+by input offset, with no dependence on pointer size or host word order.</li>
+<li><code>make fuzz FUZZ_ITERATIONS=5000000 FUZZ_JOBS=20 FUZZ_SEED=1788904486</code> ran
+5,000,000 iterations across 20 shards with no crash, hang, sanitizer report,
+or undocumented status. The harness now derives images from both the
+<code>valid-mixed</code> and <code>codec-lz4-block</code> corpora, and each iteration additionally
+mutates a valid codec stream, seeded from the encoders themselves, and drives
+every built-in decoder over it.</li>
+<li><code>make check</code>, <code>make crash-matrix</code>, <code>make sanitize</code>, and <code>make cxx17-check</code>
+are clean with zero warnings under the standard warning set. Coverage holds:
+<code>codec.cpp</code> is 97.0% of lines and 68.0% of branch outcomes against 85%/50%
+floors, and the production total is 92.7% of lines.</li>
+</ul>
+<h3 id="review-against-the-reference-implementation">Review against the reference implementation</h3>
+<p>The implementation was written rather than vendored (ADR-037), so it was
+checked in both directions against liblz4 4.4.5 through the <code>lz4</code> Python
+bindings. This harness is not part of the repository; the numbers below are the
+justification for the ADR, not a build dependency.</p>
+<ul>
+<li>87 payload cases, from empty through 140 kB, each compressed by TFDB and
+decompressed by liblz4, and compressed by liblz4 and decompressed by TFDB.
+All 87 round-tripped both ways. TFDB's encoder produced 228,926 bytes against
+liblz4's 222,751 for the same inputs, so the simple single-table search costs
+about 2.8% of ratio.</li>
+<li>400,000 mutated, random, and structured-random streams under ASan/UBSan.
+TFDB never accepted a stream liblz4 rejected, never disagreed on the decoded
+bytes of a stream both accepted, and rejected 15 of the 5,411 streams liblz4
+accepted. All 15 fall under the two rules <code>docs/format-v1.md</code> names: 13 were
+a nonzero match nibble on the final token and 2 were an invalid match offset.
+Offset zero is the interesting one: liblz4 copies bytes onto themselves and
+returns a full-size, plausible result rather than an error.</li>
+</ul>
+<h3 id="measured-effect-on-the-first-real-consumer">Measured effect on the first real consumer</h3>
+<p>The 60 independently compressed chunks exported by telezip
+(<code>build/telezip_export --chunks chunks.bin</code>, 742,908 bytes), each run through
+the block layer's rule that compressed bytes are stored only when strictly
+smaller:</p>
+<div class="table-wrap"><table class="data-table">
+<thead>
+<tr>
+<th scope="col">codec</th>
+<th style="text-align:right" scope="col">stored bytes</th>
+<th style="text-align:right" scope="col">ratio</th>
+<th style="text-align:right" scope="col">blocks compressed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>none:1</code></td>
+<td style="text-align:right">742,908</td>
+<td style="text-align:right">1.0000</td>
+<td style="text-align:right">0/60</td>
+</tr>
+<tr>
+<td><code>packbits:1</code></td>
+<td style="text-align:right">737,151</td>
+<td style="text-align:right">0.9923</td>
+<td style="text-align:right">60/60</td>
+</tr>
+<tr>
+<td><code>lz4_block:1</code></td>
+<td style="text-align:right">631,400</td>
+<td style="text-align:right">0.8499</td>
+<td style="text-align:right">60/60</td>
+</tr>
+</tbody>
+</table></div>
+<p>Every chunk round-tripped under every codec. This confirms the 15.0% figure
+that motivated the work, and slightly beats the 631,884 bytes the task document
+measured with <code>pyarrow</code>'s <code>lz4_raw</code>. Encode and decode times on this host were
+in the single-digit milliseconds for all 60 chunks but varied by more than 5x
+between runs under load, so they are not quoted as a result. The number is a
+property of telezip's payload, not of TFDB: an application writing already
+compressed records would gain nothing, which is why the codec stays optional
+and per-partition.</p>
+<h3 id="not-covered-here">Not covered here</h3>
+<ul>
+<li><code>make build-system-test</code> could not complete on this host. CMake configures,
+builds, passes both ctests, installs, and satisfies its external consumer;
+Meson does the same up to its external consumer step, which needs a
+<code>pkg-config</code> binary that is not installed. No build definition changed,
+because the codec added no source file.</li>
+<li><code>make tsan</code> and the long reader/writer soak remain native-Linux gates.</li>
+<li>The decision about whether telezip enables block compression by default is
+deliberately separate and needs the real vehicle traffic, not this corpus.</li>
+</ul>
 <h2 id="post-baseline-interoperability-evidence-2026-09-06">Post-baseline interoperability evidence (2026-09-06)</h2>
 <p>The following worktree checks ran on the same WSL2 kernel family with g++
 13.3.0, CMake 3.28.3, Meson 1.3.2, Ninja 1.11.1, and rustc/cargo 1.75.0. These
@@ -434,7 +550,7 @@ before freezing format v1.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">033ad0240d07f93954fcf8ec4ede4a69eb518768d447ca1a3bb9b95cad7e2fdf</span></p>
+        <p>Source SHA-256: <span class="source-hash">36f8d6bac464306ae04ae6cf171e8566188af01208306ee016dd558535e3b8cb</span></p>
       </footer>
     </main>
   </div>

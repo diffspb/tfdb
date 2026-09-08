@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="edfd0b0fa37b189bb7df2d20edf91fcb1f520de3fef02295c1b444446f1a26e7">
+  <meta name="tfdb-source-sha256" content="da25568a04f189de5e02d7b230dabe7b6f8e29396331f9b9825909a20cbd296f">
   <title>Architecture decision log — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -249,7 +249,7 @@ may be revisited before format v1 is declared stable.</p>
 </tr>
 <tr>
 <td>ADR-034</td>
-<td>The v1 portable codec set is <code>none:1</code> and <code>packbits:1</code>; LZ4 ID 2 stays reserved and unimplemented</td>
+<td>The v1 portable codec set is <code>none:1</code> and <code>packbits:1</code>; LZ4 ID 2 stays reserved and unimplemented (superseded by ADR-036)</td>
 <td>Add another codec before evidence; reuse ID 2</td>
 <td>Freezes a small independently tested set without preventing a later explicitly registered codec</td>
 </tr>
@@ -258,6 +258,18 @@ may be revisited before format v1 is declared stable.</p>
 <td>Validate feature-region bounds before classifying an unknown optional region, and treat current-volume structural failure as a read-only header gap</td>
 <td>Return <code>unsupported</code> before checking the region; make validated-descriptor damage a global open error</td>
 <td>Malformed ranges cannot evade corruption reporting, and C++/Rust recovery selection agrees</td>
+</tr>
+<tr>
+<td>ADR-036</td>
+<td>Implement <code>lz4_block:1</code> as the LZ4 raw block format before the v1 freeze, superseding ADR-034</td>
+<td>Leave ID 2 reserved; adopt zstd instead; reuse ID 2 for zstd later</td>
+<td>Measured on the first real consumer, LZ4 recovers about 70% of what zstd-3 saves with no dependency and no new ID; the codec stays optional and per-partition, so a payload it cannot shrink still costs zero bytes</td>
+</tr>
+<tr>
+<td>ADR-037</td>
+<td>Write the ~350-line codec instead of vendoring <code>lz4.c</code></td>
+<td>Vendor the upstream reference in <code>third_party/lz4/</code>; vendor the encoder only</td>
+<td>The reference encoder's hash width follows <code>sizeof(reg_t)</code>, so 32- and 64-bit builds emit different compressed bytes and the byte-exact shared corpus would fail on one of them; vendoring would also add a C toolchain path to three build front ends and local warning suppressions. Reviewed against liblz4 in both directions instead</td>
 </tr>
 </tbody>
 </table></div>
@@ -269,12 +281,14 @@ review, and compatibility decision before implementation:</p>
 <li>a block-summary callback and media contract for project-specific indexes;</li>
 <li>a dual-clock common log profile in this repository or a companion package;</li>
 <li>a paged index reader if target measurements show peak RAM is too high;</li>
-<li>any codec beyond <code>none:1</code> and <code>packbits:1</code>.</li>
+<li>any codec beyond <code>none:1</code>, <code>packbits:1</code>, and <code>lz4_block:1</code>, zstd in
+particular: it saves more than LZ4 but is a much larger dependency and its
+own decision, and it must take a new registry ID rather than ID 2.</li>
 </ul>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">edfd0b0fa37b189bb7df2d20edf91fcb1f520de3fef02295c1b444446f1a26e7</span></p>
+        <p>Source SHA-256: <span class="source-hash">da25568a04f189de5e02d7b230dabe7b6f8e29396331f9b9825909a20cbd296f</span></p>
       </footer>
     </main>
   </div>

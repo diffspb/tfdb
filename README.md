@@ -13,6 +13,7 @@ reads use compact per-block time indexes.
 The project is intentionally dependency-free at runtime. It includes:
 
 - a synchronous block/record writer and reader;
+- optional per-partition block compression: PackBits and LZ4 raw block;
 - a background asynchronous writer wrapper;
 - a POSIX file/block-device backend and a deterministic in-memory fault backend;
 - inspection, verification, extraction, and load-generation tools;

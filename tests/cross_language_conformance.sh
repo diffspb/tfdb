@@ -25,7 +25,9 @@ for name in \
   stale-writer-chain \
   live-rotation-01-before-reuse \
   live-rotation-02-header-reused \
-  live-rotation-03-new-block; do
+  live-rotation-03-new-block \
+  codec-lz4-block \
+  codec-unknown-version; do
   cmp "testdata/format-v1/$name.tfdb" "$generated_cases/$name.tfdb"
 done
 sha256sum -c testdata/format-v1/SHA256SUMS
@@ -124,6 +126,13 @@ compare_valid_case live-rotation-02-header-reused \
 compare_valid_case live-rotation-03-new-block \
   'verified blocks=2 raw_bytes=400 gaps=0' \
   'verified blocks=2 records=0 raw_bytes=400 gaps=0'
+
+# Both readers decode lz4_block:1 to the same bytes, including the block that
+# fell back to `none` because the codec could not shrink it.
+compare_valid_case codec-lz4-block \
+  'verified blocks=4 raw_bytes=6240 gaps=0' \
+  'verified blocks=4 records=0 raw_bytes=6240 gaps=0'
+compare_open_failure codec-unknown-version unsupported Unsupported
 
 # Both implementations must assign the same contract-level result to derived
 # corruption/recovery cases. Exact diagnostic prose is intentionally not ABI.

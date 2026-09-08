@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="60a2ea4b7141019a63c322ca074adbf67762159d075a5e2786dfa57ed3583405">
+  <meta name="tfdb-source-sha256" content="36a7766aa0ed93910992de1f841ea88de8d39a1f9b32dbe68623952bd1b1d456">
   <title>Changelog — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -51,6 +51,10 @@ C++/Rust conformance corpus;</li>
 <li>reproducible sanitizer-backed media fuzzer with process sharding;</li>
 <li>reproducible shared feature/bounds, stale-writer, and live-rotation corpus
 images with SHA-256 protection;</li>
+<li><code>lz4_block:1</code>, the LZ4 raw block format, in both the C++ writer/reader and
+the Rust reader, with a normative byte grammar, a shared corpus image, and a
+codec stage in the media fuzzer; the reserved compression ID 2 is now
+assigned rather than reserved;</li>
 <li>BSD-2-Clause license and explicit project attribution.</li>
 </ul>
 <h3 id="changed">Changed</h3>
@@ -81,7 +85,7 @@ blocks, time index, recovery/gap handling, tools, tests, and documentation.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">60a2ea4b7141019a63c322ca074adbf67762159d075a5e2786dfa57ed3583405</span></p>
+        <p>Source SHA-256: <span class="source-hash">36a7766aa0ed93910992de1f841ea88de8d39a1f9b32dbe68623952bd1b1d456</span></p>
       </footer>
     </main>
   </div>

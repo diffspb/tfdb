@@ -19,7 +19,7 @@ runtime dependencies: none beyond Linux/POSIX and the C++ standard library
 
 The baseline contains the synchronous ring store, bounded asynchronous
 wrapper, regular-file/block-device backend, deterministic memory/fault model,
-FramedRecordV1, raw and PackBits blocks, time indexing, query/gap handling,
+FramedRecordV1, raw, PackBits and LZ4 blocks, time indexing, query/gap handling,
 five diagnostic/load tools, examples, and Markdown/HTML documentation.
 
 Reference software evidence is reproducible and recorded in
@@ -105,14 +105,14 @@ writer. Its purpose is to challenge the specification independently.
 
 1. Extract persistent golden bytes from C++-only test code into a versioned
    `testdata/format-v1/` corpus with a machine-readable manifest.
-2. Include valid volume, partition, block, index, footer, PackBits, and
+2. Include valid volume, partition, block, index, footer, PackBits, LZ4, and
    FramedRecordV1 objects plus truncation, CRC, bounds, unknown-feature, and
    stale-generation cases.
 3. Keep expected classifications at the contract level (`valid`, `corrupt`,
    `unsupported`, gap/overwrite semantics); diagnostic message text is not a
    cross-language ABI.
 4. Implement fixed-width little-endian decoding, checked arithmetic, CRC32C,
-   PackBits, generation ordering, partition recovery, block iteration,
+   PackBits, LZ4, generation ordering, partition recovery, block iteration,
    FramedRecordV1 decoding, and exact selector/time filtering in Rust.
 5. Provide read-only Rust equivalents of `inspect`, `verify`, and `dump`.
 6. Run both implementations against the same corpus. The Rust code must not

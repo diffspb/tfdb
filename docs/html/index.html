@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="fea14555bc1578a145a5333407d81b5db15cd37c62c6051a6eb1e0cb7104d31d">
+  <meta name="tfdb-source-sha256" content="f2403c5d53fa5567897e24961da227f3d5bf9076baf03a6fb0b51b1e609115bf">
   <title>TFDB — Telemetry Flash DB — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -48,6 +48,7 @@ reads use compact per-block time indexes.</p>
 <p>The project is intentionally dependency-free at runtime. It includes:</p>
 <ul>
 <li>a synchronous block/record writer and reader;</li>
+<li>optional per-partition block compression: PackBits and LZ4 raw block;</li>
 <li>a background asynchronous writer wrapper;</li>
 <li>a POSIX file/block-device backend and a deterministic in-memory fault backend;</li>
 <li>inspection, verification, extraction, and load-generation tools;</li>
@@ -159,7 +160,7 @@ distributions.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">fea14555bc1578a145a5333407d81b5db15cd37c62c6051a6eb1e0cb7104d31d</span></p>
+        <p>Source SHA-256: <span class="source-hash">f2403c5d53fa5567897e24961da227f3d5bf9076baf03a6fb0b51b1e609115bf</span></p>
       </footer>
     </main>
   </div>

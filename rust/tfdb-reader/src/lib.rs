@@ -6,7 +6,8 @@
 //! The crate intentionally uses only the Rust standard library and does not
 //! call the C++ implementation. It validates structure and payload CRC32C,
 //! rebuilds missing indexes by scanning the valid block prefix, decodes the
-//! built-in PackBits codec, and can parse the optional FramedRecordV1 profile.
+//! built-in PackBits and LZ4 block codecs, and can parse the optional
+//! FramedRecordV1 profile.
 
 #![forbid(unsafe_code)]
 
@@ -17,7 +18,7 @@ mod format;
 mod reader;
 mod records;
 
-pub use crate::codec::decompress_packbits;
+pub use crate::codec::{decompress_lz4_block, decompress_packbits};
 pub use crate::crc32c::crc32c;
 pub use crate::error::{Error, ErrorKind, Result};
 pub use crate::format::{

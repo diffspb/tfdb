@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="799fd04101d4a79eefbc27cf7cb93787069791c2a80248cf5d1c44981b248949">
+  <meta name="tfdb-source-sha256" content="e497b6365e35f0672d34a46a2055cdd254b3ffab99684f0f9ca0fec455913b17">
   <title>Post-1.0 roadmap and project handoff — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -51,7 +51,7 @@ runtime dependencies: none beyond Linux/POSIX and the C++ standard library
 </code></pre>
 <p>The baseline contains the synchronous ring store, bounded asynchronous
 wrapper, regular-file/block-device backend, deterministic memory/fault model,
-FramedRecordV1, raw and PackBits blocks, time indexing, query/gap handling,
+FramedRecordV1, raw, PackBits and LZ4 blocks, time indexing, query/gap handling,
 five diagnostic/load tools, examples, and Markdown/HTML documentation.</p>
 <p>Reference software evidence is reproducible and recorded in
 <a href="evidence.html"><code>evidence.md</code></a>. It includes 76 library/recovery/integration tests,
@@ -121,14 +121,14 @@ writer. Its purpose is to challenge the specification independently.</p>
 <ol>
 <li>Extract persistent golden bytes from C++-only test code into a versioned
 <code>testdata/format-v1/</code> corpus with a machine-readable manifest.</li>
-<li>Include valid volume, partition, block, index, footer, PackBits, and
+<li>Include valid volume, partition, block, index, footer, PackBits, LZ4, and
 FramedRecordV1 objects plus truncation, CRC, bounds, unknown-feature, and
 stale-generation cases.</li>
 <li>Keep expected classifications at the contract level (<code>valid</code>, <code>corrupt</code>,
 <code>unsupported</code>, gap/overwrite semantics); diagnostic message text is not a
 cross-language ABI.</li>
 <li>Implement fixed-width little-endian decoding, checked arithmetic, CRC32C,
-PackBits, generation ordering, partition recovery, block iteration,
+PackBits, LZ4, generation ordering, partition recovery, block iteration,
 FramedRecordV1 decoding, and exact selector/time filtering in Rust.</li>
 <li>Provide read-only Rust equivalents of <code>inspect</code>, <code>verify</code>, and <code>dump</code>.</li>
 <li>Run both implementations against the same corpus. The Rust code must not
@@ -327,7 +327,7 @@ both readers, and evidence together before declaring format freeze.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">799fd04101d4a79eefbc27cf7cb93787069791c2a80248cf5d1c44981b248949</span></p>
+        <p>Source SHA-256: <span class="source-hash">e497b6365e35f0672d34a46a2055cdd254b3ffab99684f0f9ca0fec455913b17</span></p>
       </footer>
     </main>
   </div>

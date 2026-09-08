@@ -8,10 +8,19 @@ eight valid FramedRecordV1 records.
 
 `tests/make_conformance_volume.cpp` is its reproducible writer. The additional
 committed images cover unknown optional and required features, invalid feature
-and volume bounds, a stale writer-incarnation suffix, and three consecutive
-live-rotation snapshots. `tests/make_conformance_cases.cpp` regenerates those
-images from either the base volume or deterministic `MemoryStorage` crash and
-rotation schedules.
+and volume bounds, a stale writer-incarnation suffix, three consecutive
+live-rotation snapshots, and an `lz4_block:1` partition.
+`tests/make_conformance_cases.cpp` regenerates those images from either the
+base volume, deterministic `MemoryStorage` crash and rotation schedules, or a
+codec-specific write schedule.
+
+`codec-lz4-block.tfdb` is an `lz4_block:1` partition whose four blocks cover
+the decoder paths a reader has to get right: an extended literal run, extended
+and short match lengths, an overlapping distance-one run, and a payload the
+codec could not shrink, which therefore stores itself as `none` inside a
+compressed partition. `codec-unknown-version.tfdb` is that same volume with
+the compression feature claiming `lz4_block:2`; both readers must call it
+unsupported at open rather than assume version 1 is close enough.
 
 `SHA256SUMS` protects all committed images. The cross-language test regenerates
 them byte-for-byte, compares C++ and Rust block output for every valid image,

@@ -64,7 +64,12 @@ for ((shard = 0; shard < jobs; ++shard)); do
   shard_iterations=$per_shard
   [ "$shard" -eq 0 ] && shard_iterations=$((per_shard + remainder))
   shard_log="$artifacts/fuzz-seed-$shard_seed.log"
-  command=("$binary" --corpus "$corpus" --iterations "$shard_iterations"
+  # FUZZ_CORPUS may name several images; each becomes its own --corpus.
+  corpus_arguments=()
+  for image in $corpus; do
+    corpus_arguments+=(--corpus "$image")
+  done
+  command=("$binary" "${corpus_arguments[@]}" --iterations "$shard_iterations"
            --seed "$shard_seed" --artifacts "$artifacts"
            --report-every "$report_every")
   if [ "$timeout_seconds" != "0" ]; then

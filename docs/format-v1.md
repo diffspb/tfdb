@@ -175,7 +175,7 @@ The four v1 descriptors are:
 
 | Kind | Required | Algorithm | Version | Configuration/region |
 |---:|:---:|---:|---:|---|
-| 1 compression | yes | `0` none, `1` TFDB PackBits | 1 | no region/config |
+| 1 compression | yes | `0` none, `1` TFDB PackBits, `2` TFDB LZ4 block | 1 | no region/config |
 | 2 time index | yes | `1` block min/max | 1 | the configured index tail region |
 | 3 record profile | no | 0 | profile version | eight-byte profile ID at 512 |
 | 4 integrity | yes | `1` CRC32C | 1 | no region/config |
@@ -279,6 +279,91 @@ are split at 130 bytes, and literal groups are split at 128 bytes or before the
 next run of three. Empty codec input encodes empty, although a TFDB data block
 itself is never empty. The writer uses PackBits bytes only when their length is
 strictly less than raw input; otherwise the block codec is `none`.
+
+### TFDB LZ4 block v1 byte grammar
+
+The stored stream is the [LZ4 raw block
+format](https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md) carried
+directly in the block payload. TFDB deliberately takes the block format and not
+the LZ4 frame format: a frame would repeat the magic, the flags, and the
+decompressed size that the TFDB block header already carries, and it is a
+little larger in practice. Everything the decoder needs comes from the block
+header, which CRC32C has already validated: `stored_size` bounds the input and
+`raw_size` bounds the output exactly.
+
+The stream is a sequence of sequences and contains no terminator, no magic, and
+no checksum of its own. Each sequence is:
+
+- one token byte: the high nibble is a literal length, the low nibble a match
+  length;
+- if the literal nibble is `15`, additional bytes, each adding its value, the
+  run ending at the first byte below `255`;
+- that many literal bytes, copied to the output;
+- a two-byte little-endian match offset, counted back from the current end of
+  the output;
+- if the match nibble is `15`, additional bytes read the same way;
+- a match of `match nibble + 4` bytes copied from the offset. The copy is
+  byte at a time: an offset smaller than the match length repeats the
+  overlapping window, which is how a byte or word run is encoded.
+
+The final sequence stops after its literals: no offset, no match.
+
+A v1 decoder is bounded by `raw_size` and rejects, without reading or writing
+outside either buffer:
+
+- a literal run or match that would pass the end of the stored stream, or that
+  the remaining `raw_size` cannot hold;
+- an extended length whose `255` run reaches the end of the stored stream, or
+  whose total already exceeds `raw_size`;
+- a match offset of zero, or one larger than the number of bytes decoded so
+  far;
+- a final token whose match nibble is nonzero, which announces a match whose
+  offset was never stored;
+- a final output size other than `raw_size`.
+
+Two of those are stricter than a permissive LZ4 decoder, deliberately. Offset
+zero is invalid in the LZ4 specification, but a decoder that computes
+`output - 0` copies bytes onto themselves and returns plausible garbage instead
+of failing; TFDB treats damage that decodes as worse than damage that stops. A
+nonzero match nibble on the final token is likewise a grammar violation that
+permissive decoders ignore.
+
+A v1 decoder also enforces the two LZ4 parsing restrictions, which every
+conforming encoder honors, so any stream TFDB accepts a stock LZ4 decoder also
+accepts: the last five bytes of the block are literals, and the last match
+starts at least twelve bytes before the end. Both are checked against
+`raw_size` once the stream ends and only when the stream contains a match.
+
+The v1 encoder is canonical. It searches with a single 4096-entry hash table of
+four-byte sequences, keeps no match chains and does no lazy matching, takes the
+first candidate within the 65535-byte window whose four bytes match, and
+extends it as far as the parsing restrictions allow. It emits a match only from
+a position at least thirteen bytes before the end and never lets a match reach
+into the last five bytes, so its output satisfies the restrictions above with a
+byte to spare. Everything the search consults is a byte value or an input
+offset, never an address, a clock, or the host word order, so one input yields
+one byte-identical output on every supported platform and in every build.
+Empty codec input encodes as the single token `0x00`, which is what a stock LZ4
+encoder emits, although a TFDB data block itself is never empty. As with
+PackBits, the writer uses LZ4 bytes only when their length is strictly less
+than the raw input; otherwise the block codec is `none`, which is why a
+partition configured for `lz4_block:1` may contain `none:1` blocks.
+
+Normative vectors, raw input to stored stream:
+
+| Raw | Stored |
+|---|---|
+| (empty) | `00` |
+| `61` | `1061` |
+| `61` × 13 | `d0` followed by `61` × 13 |
+| `61` × 20 | `1a610100506161616161` |
+| `000102`…`13` then `00010203` × 10 | `f005000102030405060708090a0b0c0d0e0f1011121314000f04000c500300010203` |
+
+The third row is the largest input that cannot be compressed at all: below
+thirteen bytes the parsing restrictions leave no position at which a match may
+start. The fourth is one literal, a fourteen-byte match at offset one that
+repeats the overlapping window, then the five mandatory last literals. The
+fifth saturates both length nibbles.
 
 Current flags are:
 
@@ -462,7 +547,7 @@ Persistent IDs are never reused. Current assignments are:
 
 - compression 0: none v1;
 - compression 1: TFDB PackBits v1;
-- compression 2: reserved for a reviewed LZ4 block codec, not implemented;
+- compression 2: TFDB LZ4 block v1, the LZ4 raw block format;
 - time index 1: per-block signed min/max v1;
 - integrity 1: CRC32C v1;
 - record profile `0x5446444252465631`: FramedRecordV1.

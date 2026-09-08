@@ -38,8 +38,10 @@ may be revisited before format v1 is declared stable.
 | ADR-031 | Load qualification uses a bounded persisted-write oracle and capped deterministic latency reservoirs | Retain every generated payload; validate only whatever a query happens to return | Exact retention-window checks and stable memory use remain practical for long rotation workloads |
 | ADR-032 | Qualify v1 with a standard-library-only independent Rust reader and shared byte corpus | Rust FFI to C++; duplicate writer first | Challenges the specification without sharing parser logic or adding a C++ runtime dependency |
 | ADR-033 | Reconstruct bad wall time only in a versioned export sidecar with uncertainty and immutable originals | Rewrite TFDB records; silently substitute arrival time | Exact recovery is sometimes impossible; provenance and later reprocessing remain available |
-| ADR-034 | The v1 portable codec set is `none:1` and `packbits:1`; LZ4 ID 2 stays reserved and unimplemented | Add another codec before evidence; reuse ID 2 | Freezes a small independently tested set without preventing a later explicitly registered codec |
+| ADR-034 | The v1 portable codec set is `none:1` and `packbits:1`; LZ4 ID 2 stays reserved and unimplemented (superseded by ADR-036) | Add another codec before evidence; reuse ID 2 | Freezes a small independently tested set without preventing a later explicitly registered codec |
 | ADR-035 | Validate feature-region bounds before classifying an unknown optional region, and treat current-volume structural failure as a read-only header gap | Return `unsupported` before checking the region; make validated-descriptor damage a global open error | Malformed ranges cannot evade corruption reporting, and C++/Rust recovery selection agrees |
+| ADR-036 | Implement `lz4_block:1` as the LZ4 raw block format before the v1 freeze, superseding ADR-034 | Leave ID 2 reserved; adopt zstd instead; reuse ID 2 for zstd later | Measured on the first real consumer, LZ4 recovers about 70% of what zstd-3 saves with no dependency and no new ID; the codec stays optional and per-partition, so a payload it cannot shrink still costs zero bytes |
+| ADR-037 | Write the ~350-line codec instead of vendoring `lz4.c` | Vendor the upstream reference in `third_party/lz4/`; vendor the encoder only | The reference encoder's hash width follows `sizeof(reg_t)`, so 32- and 64-bit builds emit different compressed bytes and the byte-exact shared corpus would fail on one of them; vendoring would also add a C toolchain path to three build front ends and local warning suppressions. Reviewed against liblz4 in both directions instead |
 
 ## Deferred extension decisions
 
@@ -50,4 +52,6 @@ review, and compatibility decision before implementation:
 - a block-summary callback and media contract for project-specific indexes;
 - a dual-clock common log profile in this repository or a companion package;
 - a paged index reader if target measurements show peak RAM is too high;
-- any codec beyond `none:1` and `packbits:1`.
+- any codec beyond `none:1`, `packbits:1`, and `lz4_block:1`, zstd in
+  particular: it saves more than LZ4 but is a much larger dependency and its
+  own decision, and it must take a new registry ID rather than ID 2.

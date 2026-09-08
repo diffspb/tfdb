@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="46e7ba42b3f5358b9b4ec32e0a231afeaabd3c76ffa10ed0d9b441865520d728">
+  <meta name="tfdb-source-sha256" content="ec17c056a2641599cc75fa1dd0392ed29cfb156a0a0e044acb8d0a95d9826cf7">
   <title>TFDB C++14 API reference — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -389,7 +389,7 @@ calls. Counters measure reported transferred bytes, not physical NAND writes.</p
 <tr>
 <td><code>lz4_block</code></td>
 <td style="text-align:right">2</td>
-<td>reserved; not implemented by the core</td>
+<td>built in, dependency-free; LZ4 raw block format</td>
 </tr>
 </tbody>
 </table></div>
@@ -408,12 +408,19 @@ exactly <code>expected_size</code>; TFDB rejects a mismatch.
 Codec methods must not throw when they may run on the async worker; report
 extension failures with <code>Status</code>. The input view may refer to the current
 contents of <code>*output</code>; consume it before changing output or build into a
-temporary vector and swap. Both built-in codecs support aliased input/output.</p>
+temporary vector and swap. All built-in codecs support aliased input/output.</p>
 <p>Factory functions:</p>
 <pre><code class="language-cpp">std::shared_ptr&lt;const CompressionCodec&gt; no_compression_codec();
 std::shared_ptr&lt;const CompressionCodec&gt; packbits_codec();
+std::shared_ptr&lt;const CompressionCodec&gt; lz4_block_codec();
 std::shared_ptr&lt;const CompressionCodec&gt; built_in_codec(CompressionId id);
 </code></pre>
+<p><code>packbits_codec()</code> captures adjacent equal-byte runs; <code>lz4_block_codec()</code>
+additionally finds repeated byte sequences within a 65535-byte window and is
+usually the better default for payloads that are not already compressed. Both
+encoders are deterministic: one input yields one byte-identical output on every
+supported platform. Their exact byte grammars are normative in
+<code>docs/format-v1.md</code> section 6.</p>
 <p>When compression is configured, TFDB stores a block compressed only if the
 result is smaller; otherwise that block uses <code>CompressionId::none</code>.</p>
 <h2 id="volume-and-partition-configuration">Volume and partition configuration</h2>
@@ -1014,7 +1021,7 @@ power-loss and endurance requirements.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">46e7ba42b3f5358b9b4ec32e0a231afeaabd3c76ffa10ed0d9b441865520d728</span></p>
+        <p>Source SHA-256: <span class="source-hash">ec17c056a2641599cc75fa1dd0392ed29cfb156a0a0e044acb8d0a95d9826cf7</span></p>
       </footer>
     </main>
   </div>

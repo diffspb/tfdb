@@ -213,8 +213,10 @@ async addition <= configured queue byte capacity
                 + one oldest-undurable timestamp
 ```
 
-For TFDB PackBits the candidate bound is
-`B + ceil(B/128)`. The `none` codec skips that candidate copy. Multiple readers
+For TFDB PackBits the candidate bound is `B + ceil(B/128)`, and for TFDB LZ4
+block it is `B + floor(B/255) + 16`; the LZ4 encoder additionally holds a fixed
+32 KiB match table for the duration of one `compress()` call. The `none` codec
+skips that candidate copy. Multiple readers
 multiply reader memory; they do not pin media. Measure RSS with the final
 allocator and concurrency because vector capacity and thread stacks are not in
 the formulas.

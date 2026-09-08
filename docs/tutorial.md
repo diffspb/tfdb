@@ -375,11 +375,14 @@ Use `submit_checked()` with the contract attached to each queued record; a
 stale record then fails explicitly instead of being written under the wrong
 profile or time domain.
 
-The built-in dependency-free codecs are `none` and PackBits. Compression is
-selected per block only when the compressed representation is smaller. The
-`lz4_block` identifier is reserved but has no built-in implementation; supply
-a matching `CompressionCodec` in `OpenOptions::compression_codecs` before
-opening media that uses an external codec.
+The built-in dependency-free codecs are `none`, PackBits, and LZ4 raw block.
+Compression is selected per block only when the compressed representation is
+smaller, so a payload the codec cannot shrink costs processor time but never
+bytes. PackBits only finds adjacent equal-byte runs; `lz4_block` also finds
+repeated byte sequences and is usually the better choice unless the payload is
+already compressed. For any other codec, supply a matching `CompressionCodec`
+in `OpenOptions::compression_codecs` before opening the media, and register its
+ID, version, and byte specification before treating that media as portable.
 
 ## 11. Store application logs
 

@@ -17,3 +17,5 @@ stale-writer-chain	stale-writer-chain.tfdb	valid:stale-crash-suffix-ignored:A-D
 live-rotation-01-before-reuse	live-rotation-01-before-reuse.tfdb	valid:generations-1-2:A-B
 live-rotation-02-header-reused	live-rotation-02-header-reused.tfdb	valid:generation-1-overwritten:B
 live-rotation-03-new-block	live-rotation-03-new-block.tfdb	valid:generations-2-3:B-C
+codec-lz4-block	codec-lz4-block.tfdb	valid:lz4-block-and-none-blocks:4-blocks
+codec-unknown-version	codec-lz4-block;partition-header-feature[0].version=2	unsupported:unknown-codec-version

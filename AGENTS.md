@@ -87,10 +87,11 @@ repository contract.
 ## Current priority
 
 The independent Rust reader and expanded shared corpus are present. The corpus
-now includes feature/bounds, stale-writer-chain, and live-rotation cases; keep
-it under independent review and add saved cases when fuzzing exposes a
-specification gap. Move testing to native Linux for fuzzing, TSan, and the long
-soak while preparing representative trace replay. Do not add optional codecs
-or secondary indexes. Physical power-cut and endurance work begins only on an
-explicitly identified, expendable target device with an approved test
-procedure.
+now includes feature/bounds, stale-writer-chain, live-rotation, and
+`lz4_block:1` codec cases; keep it under independent review and add saved cases
+when fuzzing exposes a specification gap. Move testing to native Linux for
+fuzzing, TSan, and the long soak while preparing representative trace replay.
+The portable codec set is now `none:1`, `packbits:1`, and `lz4_block:1`
+(ADR-036); do not add further codecs or secondary indexes. Physical power-cut
+and endurance work begins only on an explicitly identified, expendable target
+device with an approved test procedure.

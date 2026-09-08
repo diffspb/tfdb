@@ -8,13 +8,21 @@
 // likely to trust a length or offset it should have checked, then opens each
 // image lazily and strictly and drives scan, query, and inspection over it.
 //
+// A second stage fuzzes the compression codecs directly. It seeds from valid
+// streams produced by the encoders themselves, so the mutator starts inside
+// the grammar rather than from noise a decoder rejects on its first byte, and
+// it drives every built-in decoder over every mutated stream. The oracle is
+// that a decoder either fails or returns exactly the size the caller declared,
+// and that an unmutated stream still round-trips.
+//
 // The oracle is deliberately narrow and mechanical: no image may crash, hang,
 // trip a sanitizer, or produce a status outside the documented set. Deciding
 // whether a given corrupted image *should* have been readable is the job of
 // the shared corpus manifest, not of a random mutator.
 //
-// Every run is reproducible from (corpus, seed, iteration). A failing image is
-// written next to the corpus so it can be replayed with --image.
+// Every run is reproducible from (corpus, seed, iteration). A failing media
+// image is written next to the corpus so it can be replayed with --image; a
+// codec-stage finding is reproduced from the seed and iteration alone.
 
 #include <cstdio>
 #include <cstdlib>
@@ -25,6 +33,7 @@
 #include <string>
 #include <vector>
 
+#include "tfdb/codec.hpp"
 #include "tfdb/memory_storage.hpp"
 #include "tfdb/record_profile.hpp"
 #include "tfdb/ring_store.hpp"
@@ -34,7 +43,7 @@
 namespace {
 
 struct Options {
-  std::string corpus;
+  std::vector<std::string> corpora;
   std::string image;
   std::string artifact_dir;
   std::uint64_t iterations = 20000;
@@ -151,6 +160,137 @@ void exercise(const std::vector<std::uint8_t>& image, Findings* findings) {
   }
 }
 
+// Valid seed streams paired with the payload they came from.
+struct CodecSeed {
+  std::shared_ptr<const tfdb::CompressionCodec> codec;
+  std::vector<std::uint8_t> raw;
+  std::vector<std::uint8_t> stored;
+};
+
+std::vector<std::vector<std::uint8_t>> codec_payloads() {
+  std::vector<std::vector<std::uint8_t>> payloads;
+  // Sizes around the thirteen-byte threshold below which LZ4 cannot start a
+  // match, plus shapes that saturate each length nibble.
+  for (std::size_t size : {std::size_t(0), std::size_t(1), std::size_t(12),
+                           std::size_t(13), std::size_t(20)})
+    payloads.push_back(std::vector<std::uint8_t>(size, 0x61));
+  std::vector<std::uint8_t> run(1500, 0x2a);
+  payloads.push_back(run);
+  std::vector<std::uint8_t> cycles(1500);
+  for (std::size_t i = 0; i != cycles.size(); ++i)
+    cycles[i] = static_cast<std::uint8_t>((i % 16) + (i / 64));
+  payloads.push_back(cycles);
+  std::vector<std::uint8_t> extended;
+  for (unsigned i = 0; i != 40; ++i)
+    extended.push_back(static_cast<std::uint8_t>(i * 7 + 1));
+  for (unsigned i = 0; i != 1200; ++i)
+    extended.push_back(static_cast<std::uint8_t>(i % 4));
+  payloads.push_back(extended);
+  std::vector<std::uint8_t> noise(1500);
+  std::uint32_t state = 0x1234567u;
+  for (std::uint8_t& byte : noise) {
+    state = state * 1103515245u + 12345u;
+    byte = static_cast<std::uint8_t>(state >> 16);
+  }
+  payloads.push_back(noise);
+  return payloads;
+}
+
+std::vector<std::shared_ptr<const tfdb::CompressionCodec>> built_in_codecs() {
+  std::vector<std::shared_ptr<const tfdb::CompressionCodec>> codecs;
+  const tfdb::CompressionId ids[] = {tfdb::CompressionId::none,
+                                     tfdb::CompressionId::packbits,
+                                     tfdb::CompressionId::lz4_block};
+  for (tfdb::CompressionId id : ids) codecs.push_back(tfdb::built_in_codec(id));
+  return codecs;
+}
+
+std::vector<CodecSeed> build_codec_seeds(Findings* findings) {
+  std::vector<CodecSeed> seeds;
+  const std::vector<std::vector<std::uint8_t>> payloads = codec_payloads();
+  for (const std::shared_ptr<const tfdb::CompressionCodec>& codec :
+       built_in_codecs()) {
+    for (const std::vector<std::uint8_t>& raw : payloads) {
+      CodecSeed seed;
+      seed.codec = codec;
+      seed.raw = raw;
+      const tfdb::Status status =
+          codec->compress(tfdb::ByteView(raw), &seed.stored);
+      check(findings, status, "seed compress");
+      if (!status.ok()) return seeds;
+      if (seed.stored.size() > codec->max_compressed_size(raw.size())) {
+        findings->reason = "encoder exceeded its own max_compressed_size";
+        return seeds;
+      }
+      seeds.push_back(seed);
+    }
+  }
+  return seeds;
+}
+
+// Drives one mutated codec stream through every built-in decoder.
+void exercise_codecs(const std::vector<CodecSeed>& seeds,
+                     const std::vector<std::shared_ptr<
+                         const tfdb::CompressionCodec>>& codecs,
+                     std::mt19937_64* rng, Findings* findings) {
+  const CodecSeed& seed = seeds[static_cast<std::size_t>((*rng)() %
+                                                         seeds.size())];
+  std::vector<std::uint8_t> stream = seed.stored;
+  bool mutated = false;
+  const int shape = static_cast<int>((*rng)() % 8);
+  if (shape == 0 && !stream.empty()) {
+    stream.resize(static_cast<std::size_t>(
+        (*rng)() % (stream.size() + 1)));
+    mutated = true;
+  } else if (shape < 6 && !stream.empty()) {
+    const int mutations = static_cast<int>(1 + (*rng)() % 4);
+    for (int i = 0; i != mutations; ++i) {
+      const std::size_t offset =
+          static_cast<std::size_t>((*rng)() % stream.size());
+      // Single-bit flips reach a length nibble; whole-byte writes reach an
+      // offset or an extended-length run.
+      if ((*rng)() % 2 == 0)
+        stream[offset] ^= static_cast<std::uint8_t>(1u << ((*rng)() % 8));
+      else
+        stream[offset] = static_cast<std::uint8_t>((*rng)() % 256);
+    }
+    mutated = true;
+  } else if (shape == 6) {
+    stream.push_back(static_cast<std::uint8_t>((*rng)() % 256));
+    mutated = true;
+  }
+
+  // Usually the size the block header would carry, sometimes a neighbouring
+  // or unrelated one, which is what a corrupt header would supply.
+  std::size_t expected = seed.raw.size();
+  const int size_shape = static_cast<int>((*rng)() % 8);
+  if (size_shape == 6) {
+    expected = static_cast<std::size_t>((*rng)() % 4096);
+  } else if (size_shape == 7) {
+    const std::size_t delta = static_cast<std::size_t>((*rng)() % 3);
+    expected = expected + 1 >= delta ? expected + 1 - delta : 0;
+  }
+
+  for (const std::shared_ptr<const tfdb::CompressionCodec>& codec : codecs) {
+    std::vector<std::uint8_t> output;
+    const tfdb::Status status =
+        codec->decompress(tfdb::ByteView(stream), expected, &output);
+    check(findings, status, "codec decompress");
+    if (findings->failed()) return;
+    if (!status.ok()) continue;
+    if (output.size() != expected) {
+      findings->reason = "decoder succeeded with a size the caller never asked for";
+      return;
+    }
+    // An untouched stream must still decode to exactly what was encoded.
+    if (!mutated && expected == seed.raw.size() && codec == seed.codec &&
+        output != seed.raw) {
+      findings->reason = "encoder and decoder disagree on an unmutated stream";
+      return;
+    }
+  }
+}
+
 std::size_t pick_offset(std::mt19937_64* rng, std::size_t size) {
   // Bias toward the structural prefix: the two volume header copies, the
   // partition header regions, and the first block frames. Uniform mutation
@@ -210,7 +350,8 @@ std::vector<std::uint8_t> derive(const std::vector<std::uint8_t>& corpus,
 
 void usage() {
   std::fprintf(stderr,
-               "usage: tfdb_fuzz_media --corpus PATH [--iterations N] "
+               "usage: tfdb_fuzz_media --corpus PATH [--corpus PATH ...] "
+               "[--iterations N] "
                "[--seed N] [--artifacts DIR] [--report-every N]\n"
                "       tfdb_fuzz_media --image PATH\n");
 }
@@ -237,7 +378,8 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
     const bool has_value = i + 1 < argc;
-    if (argument == "--corpus" && has_value) options.corpus = argv[++i];
+    if (argument == "--corpus" && has_value)
+      options.corpora.push_back(argv[++i]);
     else if (argument == "--image" && has_value) options.image = argv[++i];
     else if (argument == "--artifacts" && has_value) options.artifact_dir = argv[++i];
     else if (argument == "--iterations" && has_value) {
@@ -265,24 +407,35 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  if (options.corpus.empty() || options.iterations == 0) { usage(); return 2; }
-  const std::vector<std::uint8_t> corpus = read_file(options.corpus);
-  if (corpus.empty()) {
-    std::fprintf(stderr, "cannot read corpus %s\n", options.corpus.c_str());
-    return 2;
+  if (options.corpora.empty() || options.iterations == 0) { usage(); return 2; }
+  std::vector<std::vector<std::uint8_t>> corpora;
+  for (const std::string& path : options.corpora) {
+    const std::vector<std::uint8_t> image = read_file(path);
+    if (image.empty()) {
+      std::fprintf(stderr, "cannot read corpus %s\n", path.c_str());
+      return 2;
+    }
+    corpora.push_back(image);
   }
   if (options.artifact_dir.empty()) options.artifact_dir = ".";
 
-  std::printf("tfdb_fuzz_media %s corpus=%s bytes=%zu iterations=%llu "
-              "seed=%llu\n",
-              TFDB_VERSION_STRING, options.corpus.c_str(), corpus.size(),
-              static_cast<unsigned long long>(options.iterations),
-              static_cast<unsigned long long>(options.seed));
+  for (std::size_t i = 0; i != corpora.size(); ++i) {
+    std::printf("tfdb_fuzz_media %s corpus=%s bytes=%zu iterations=%llu "
+                "seed=%llu\n",
+                TFDB_VERSION_STRING, options.corpora[i].c_str(),
+                corpora[i].size(),
+                static_cast<unsigned long long>(options.iterations),
+                static_cast<unsigned long long>(options.seed));
+  }
 
-  // The valid corpus itself must always pass, so a broken harness fails
-  // immediately rather than after a long run of mutated images.
+  // The valid corpus and the codec seeds must always pass, so a broken harness
+  // fails immediately rather than after a long run of mutated images.
   Findings baseline;
-  exercise(corpus, &baseline);
+  for (const std::vector<std::uint8_t>& image : corpora)
+    exercise(image, &baseline);
+  const std::vector<std::shared_ptr<const tfdb::CompressionCodec>> codecs =
+      built_in_codecs();
+  const std::vector<CodecSeed> seeds = build_codec_seeds(&baseline);
   if (baseline.failed()) {
     std::fprintf(stderr, "FAILED on the unmodified corpus: %s\n",
                  baseline.reason.c_str());
@@ -295,25 +448,35 @@ int main(int argc, char** argv) {
     // Reseeding per iteration keeps any single image reproducible from
     // (seed, iteration) without replaying everything before it.
     std::mt19937_64 local(rng());
-    const std::vector<std::uint8_t> image = derive(corpus, &local);
-    if (image.empty()) continue;
     Findings findings;
-    exercise(image, &findings);
+    exercise_codecs(seeds, codecs, &local, &findings);
+    // A codec finding is reproduced from (seed, iteration) alone; there is no
+    // media image to save, and pointing at one would send the reader to the
+    // wrong stage.
+    const bool from_codec_stage = findings.failed();
+    const std::vector<std::uint8_t>& corpus =
+        corpora[static_cast<std::size_t>(local() % corpora.size())];
+    const std::vector<std::uint8_t> image = derive(corpus, &local);
+    if (!from_codec_stage && !image.empty()) exercise(image, &findings);
     if (findings.failed()) {
+      std::fprintf(stderr, "FAILED seed=%llu iteration=%llu: %s\n",
+                   static_cast<unsigned long long>(options.seed),
+                   static_cast<unsigned long long>(iteration),
+                   findings.reason.c_str());
+      if (from_codec_stage) {
+        std::fprintf(stderr,
+                     "codec stage; rerun this shard with --seed %llu\n",
+                     static_cast<unsigned long long>(options.seed));
+        return 1;
+      }
       char name[256];
       std::snprintf(name, sizeof name, "%s/tfdb-fuzz-%llu-%llu.tfdb",
                     options.artifact_dir.c_str(),
                     static_cast<unsigned long long>(options.seed),
                     static_cast<unsigned long long>(iteration));
       const bool saved = write_file(name, image);
-      std::fprintf(stderr,
-                   "FAILED seed=%llu iteration=%llu: %s\n"
-                   "image %s%s\n"
-                   "replay with: tfdb_fuzz_media --image %s\n",
-                   static_cast<unsigned long long>(options.seed),
-                   static_cast<unsigned long long>(iteration),
-                   findings.reason.c_str(), name,
-                   saved ? " saved" : " COULD NOT BE SAVED", name);
+      std::fprintf(stderr, "image %s%s\nreplay with: tfdb_fuzz_media --image %s\n",
+                   name, saved ? " saved" : " COULD NOT BE SAVED", name);
       return 1;
     }
     if (options.report_every != 0 &&

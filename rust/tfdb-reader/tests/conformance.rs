@@ -149,3 +149,57 @@ fn shared_live_rotation_snapshots_show_reuse_without_pinning() {
         vec![(2, 0, b'B'), (3, 0, b'C')]
     );
 }
+
+/// The `lz4_block:1` corpus image. The Rust reader has no encoder, so this is
+/// the only way its decoder is held to the exact bytes the C++ writer chose:
+/// an extended literal run, extended and short match lengths, an overlapping
+/// distance-one run, and one block that fell back to `none` because the codec
+/// could not shrink it.
+#[test]
+fn shared_lz4_block_partition_decodes_to_the_written_payloads() {
+    let reader = Reader::open(corpus_case("codec-lz4-block")).unwrap();
+    assert!(reader.initial_gaps().is_empty());
+    let partitions = reader.partitions();
+    assert_eq!(partitions.len(), 1);
+    assert_eq!(partitions[0].compression_id, 2);
+    assert_eq!(partitions[0].compression_version, 1);
+
+    let run = vec![0x2au8; 2000];
+    let mut extended: Vec<u8> = (0..40u32).map(|i| (i * 7 + 1) as u8).collect();
+    extended.extend((0..1200u32).map(|i| (i % 4) as u8));
+    let cycles: Vec<u8> = (0..1500u32).map(|i| ((i % 16) + (i / 64)) as u8).collect();
+    let mut state = 0x1234567u32;
+    let noise: Vec<u8> = (0..1500)
+        .map(|_| {
+            state = state.wrapping_mul(1103515245).wrapping_add(12345);
+            (state >> 16) as u8
+        })
+        .collect();
+    let expected = [run, extended, cycles, noise];
+
+    let mut blocks = Vec::new();
+    reader
+        .scan_blocks(|event| {
+            let Event::Data(block) = event else {
+                panic!("unexpected gap in codec-lz4-block");
+            };
+            blocks.push((block.metadata.compression_id, block.data));
+            true
+        })
+        .unwrap();
+    assert_eq!(blocks.len(), 4);
+    for (index, payload) in expected.iter().enumerate() {
+        assert_eq!(&blocks[index].1, payload, "block {index}");
+    }
+    // Three blocks shrank and kept the partition codec; the pseudo-random one
+    // could not and stores itself uncompressed inside the same partition.
+    assert_eq!(
+        blocks.iter().map(|block| block.0).collect::<Vec<_>>(),
+        vec![2, 2, 2, 0]
+    );
+
+    // The same volume claiming lz4_block:2 is unsupported at open. A reader
+    // that assumed version 1 was close enough would decode the blocks into
+    // whatever version 2 happens not to mean.
+    assert_eq!(open_error("codec-unknown-version"), ErrorKind::Unsupported);
+}

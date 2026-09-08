@@ -14,7 +14,7 @@ use crate::format::{
     PARTITION_HEADER_REGION_SIZE, PARTITION_HEADER_SIZE, VOLUME_HEADER_COPY_SIZE,
     VOLUME_HEADER_SIZE, VOLUME_PREFIX_SIZE,
 };
-use crate::{crc32c, decompress_packbits, Error, ErrorKind, Result};
+use crate::{crc32c, decompress_lz4_block, decompress_packbits, Error, ErrorKind, Result};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GapKind {
@@ -448,6 +448,9 @@ impl Reader {
             1 if block.compression_version == 1 => {
                 decompress_packbits(&stored, block.raw_size as usize)?
             }
+            2 if block.compression_version == 1 => {
+                decompress_lz4_block(&stored, block.raw_size as usize)?
+            }
             _ => {
                 return Err(Error::unsupported(
                     "block compression codec/version unavailable",
@@ -596,7 +599,7 @@ fn validate_partition_header(
         return Err(Error::corrupt("partition identity/geometry mismatch"));
     }
     match (header.compression_id, header.compression_version) {
-        (0, 1) | (1, 1) => {}
+        (0, 1) | (1, 1) | (2, 1) => {}
         _ => {
             return Err(Error::unsupported(
                 "partition compression codec/version unavailable",

@@ -364,10 +364,11 @@ Logs and telemetry may share a volume only when retention, privacy, and load
 policies match. Separate partitions per type are not supported inside one ring;
 separate volumes are simpler when log bursts must not evict safety telemetry.
 
-Text logs often compress well with dictionary/match codecs such as LZ4 or Zstd,
-but the v1 PackBits baseline only helps adjacent equal-byte runs and reduced
-the reference log workload by only about 2%. Logs can also contain already-
-compressed blobs or secrets. Compression is partition-local and optional.
+Text logs often compress well with dictionary/match codecs. The v1 PackBits
+baseline only helps adjacent equal-byte runs and reduced the reference log
+workload by only about 2%; `lz4_block:1` is the built-in match codec for that
+case. Logs can also contain already-compressed blobs or secrets. Compression is
+partition-local and optional.
 Encryption and tamper authentication are intentionally outside format v1; CRC
 is not a security mechanism.
 

@@ -19,7 +19,7 @@ The crate validates and exposes:
 - sealed indexes with CRC32C, sequence/span checks, and footer summaries;
 - footerless recovery by the longest complete block prefix;
 - block/header/payload CRC32C and writer-incarnation chains during scans;
-- uncompressed and TFDB PackBits v1 blocks;
+- uncompressed, TFDB PackBits v1, and TFDB LZ4 block v1 blocks;
 - physical-order scans and time-domain/range candidate-block queries;
 - overwrite and corruption gaps as explicit events;
 - FramedRecordV1 sizes, CRC, timestamp, selector, flags, and payload.
@@ -28,9 +28,18 @@ The reader accepts a regular file or seekable Linux block device. For a device
 wrapper that cannot seek to its end, call `Reader::from_file_with_size()` with
 an independently established size. It never writes to the descriptor.
 
-Only built-in compression IDs `none:1` and `packbits:1` are supported. A
-partition requiring another codec is `Unsupported`; it is never guessed.
-Unknown application record profiles remain opaque at the block API.
+Only built-in compression IDs `none:1`, `packbits:1`, and `lz4_block:1` are
+supported. A partition or block requiring another codec or another version of
+these is `Unsupported`; it is never guessed. Unknown application record
+profiles remain opaque at the block API.
+
+The crate decodes but never encodes, so its LZ4 implementation is a decoder
+only. It follows the grammar in `docs/format-v1.md` section 6, including the
+cases TFDB rejects that a permissive LZ4 decoder would accept: a zero match
+offset, a match announced by the final token, a last match that breaks the LZ4
+parsing restrictions, and any output that does not end at exactly `raw_size`.
+The shared corpus image `codec-lz4-block.tfdb` is what holds this decoder to
+the exact bytes the C++ encoder chose.
 
 ## Build and test
 
@@ -151,10 +160,14 @@ I/O it re-reads partition identity; detected reuse is an overwrite gap. A slow
 reader does not pin rotation. As with the C++ reader, another process that
 writes outside TFDB's single-writer protocol receives no guarantee.
 
-The current 18-case shared corpus checks byte-for-byte C++ regeneration, valid
-PackBits/raw partitions, both time domains, disordered and unsynchronized
+The current 20-case shared corpus checks byte-for-byte C++ regeneration, valid
+PackBits/raw/LZ4 partitions, both time domains, disordered and unsynchronized
 time, redundant-header recovery, invalid index rebuild, payload corruption,
 torn active tail, damaged partition metadata, unsupported format major,
 truncation, unknown feature handling, checked-arithmetic bounds, stale writer
-incarnations, and static snapshots across live rotation. A concurrent
-long-running rotation soak and hardware durability remain separate gates.
+incarnations, static snapshots across live rotation, an `lz4_block:1`
+partition whose blocks cover extended literal and match lengths, an
+overlapping distance-one run, and a payload the codec could not shrink, which
+therefore stores itself as `none`, and the same partition claiming
+`lz4_block:2`, which both readers must call unsupported at open. A concurrent long-running rotation soak and
+hardware durability remain separate gates.

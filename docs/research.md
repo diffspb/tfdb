@@ -196,19 +196,35 @@ both from its block header and output buffer; even a small correct encoder is
 non-trivial code.
 
 Format v1 therefore makes compression a versioned block codec. `none` is
-mandatory. The initial dependency-free implementation also supplies a simple
-PackBits-style byte-run codec; an LZ4 codec ID is reserved for a separately
-reviewed implementation. A writer stores compressed bytes only when they are
-smaller, so incompressible input is never expanded on media.
+mandatory. The dependency-free implementation supplies a simple PackBits-style
+byte-run codec and an LZ4 raw block codec. A writer stores compressed bytes
+only when they are smaller, so incompressible input is never expanded on media.
 
 PackBits is intentionally a baseline, not a claim of best compression. It is
 small enough to exhaustively test and useful for long repeated-byte runs such
 as zero-filled fields. Ordinary repeated text still contains too few adjacent
-equal bytes and, like mixed binary telemetry, may gain little. The immutable
-codec registry lets a project qualify another byte-specified codec without
-entangling the ring logic. A codec becomes part of the cross-language standard
-only with bounded decompression, malformed-input tests, and C++/Rust golden
-vectors.
+equal bytes and, like mixed binary telemetry, may gain little.
+
+The first real consumer showed exactly that limit. Compressing its sixty
+independent chunks the way TFDB compresses blocks, PackBits recovered 0.8% of
+743 kB while `lz4_block:1` recovered 15.0%, because the payload is already
+entropy-coded and has almost no adjacent equal bytes left for a byte-run codec
+to find. zstd-3 would recover 21% on the same data; LZ4 takes about 70% of that
+without the dependency, which is why ID 2 was implemented and zstd was not.
+Neither number generalizes: TFDB stores opaque application records, and an
+application writing already-compressed payloads gains nothing, which is why the
+codec stays optional and per-partition.
+
+TFDB implements the LZ4 block format rather than vendoring the reference,
+because the reference encoder hashes five bytes on 64-bit builds and four on
+32-bit ones and so does not emit byte-identical output across platforms, which
+the byte-exact shared corpus requires. The implementation is checked against
+liblz4 in both directions instead.
+
+The immutable codec registry lets a project qualify another byte-specified
+codec without entangling the ring logic. A codec becomes part of the
+cross-language standard only with bounded decompression, malformed-input tests,
+and C++/Rust golden vectors.
 
 Source: [LZ4 block format](https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md).
 

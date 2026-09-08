@@ -45,7 +45,7 @@ void usage() {
   std::cerr << "usage: tfdb_loadgen PATH --size BYTES [--records N] "
                "[--profile tiny|mixed|burst|sparse|hot-rotation|concurrent-read|"
                "compressible|incompressible|logs|bad-time] "
-               "[--compression none|packbits] [--partition BYTES] [--index BYTES] "
+               "[--compression none|packbits|lz4] [--partition BYTES] [--index BYTES] "
                "[--block BYTES] [--quantum BYTES] [--checkpoint-records N] "
                "[--async --sync-ms N] [--seed N] [--backend-write-chunk N] "
                "[--overwrite]\n";
@@ -63,6 +63,7 @@ bool parse(int argc, char** argv, Options* options) {
       const std::string value = argv[++i];
       if (value == "none") options->compression = tfdb::CompressionId::none;
       else if (value == "packbits") options->compression = tfdb::CompressionId::packbits;
+      else if (value == "lz4") options->compression = tfdb::CompressionId::lz4_block;
       else return false;
     } else if (i + 1 < argc) {
       std::uint64_t value = 0;
