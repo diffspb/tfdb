@@ -19,8 +19,8 @@ runtime dependencies: none beyond Linux/POSIX and the C++ standard library
 
 The baseline contains the synchronous ring store, bounded asynchronous
 wrapper, regular-file/block-device backend, deterministic memory/fault model,
-FramedRecordV1, raw, PackBits and LZ4 blocks, time indexing, query/gap handling,
-five diagnostic/load tools, examples, and Markdown/HTML documentation.
+FramedRecordV1, raw and PackBits blocks, time indexing, query/gap handling, five
+diagnostic/load tools, examples, and Markdown/HTML documentation.
 
 Reference software evidence is reproducible and recorded in
 [`evidence.md`](evidence.md). It includes 76 library/recovery/integration tests,
@@ -35,6 +35,8 @@ three read-only tools. `testdata/format-v1/valid-mixed.tfdb` is regenerated
 byte-for-byte by the C++ public API; the cross-language test compares both
 implementations over its valid and derived corruption/recovery cases. See
 [`rust-reader.md`](rust-reader.md) and [`evidence.md`](evidence.md).
+The current post-baseline tree also assigns the previously reserved compression
+ID 2 to the dependency-free `lz4_block:1` implementation described by ADR-036.
 
 The current post-baseline development version is 1.1.0 and is distributed
 under the BSD-2-Clause license. This does not move or rewrite the immutable
@@ -124,7 +126,7 @@ volumes can be inspected and dumped independently.
 
 Current state: the independent reader implements the listed decoding,
 recovery, scan/query, profile, and tool behavior. The deterministic mixed
-volume plus 17 additional cases have matching C++/Rust outcomes. Ten complete
+volume plus 19 additional cases have matching C++/Rust outcomes. Twelve complete
 images are committed with SHA-256 digests; the others are deterministic small
 mutations. Feature-directory semantics, checked-arithmetic boundaries, a
 writer-chain stale suffix, and three live-rotation snapshots are now shared

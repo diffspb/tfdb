@@ -169,5 +169,5 @@ incarnations, static snapshots across live rotation, an `lz4_block:1`
 partition whose blocks cover extended literal and match lengths, an
 overlapping distance-one run, and a payload the codec could not shrink, which
 therefore stores itself as `none`, and the same partition claiming
-`lz4_block:2`, which both readers must call unsupported at open. A concurrent long-running rotation soak and
-hardware durability remain separate gates.
+`lz4_block:2`, which both readers must call unsupported at open. A concurrent
+long-running rotation soak and hardware durability remain separate gates.

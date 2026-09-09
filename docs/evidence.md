@@ -43,9 +43,9 @@ and reader and decode-only in the Rust reader.
   mutates a valid codec stream, seeded from the encoders themselves, and drives
   every built-in decoder over it.
 - `make check`, `make crash-matrix`, `make sanitize`, and `make cxx17-check`
-  are clean with zero warnings under the standard warning set. Coverage holds:
-  `codec.cpp` is 97.0% of lines and 68.0% of branch outcomes against 85%/50%
-  floors, and the production total is 92.7% of lines.
+  are clean with zero warnings under the standard warning set. The feature
+  development run recorded `codec.cpp` at 97.0% of lines and 68.0% of branch
+  outcomes against 85%/50% floors, and the production total at 92.7% of lines.
 
 ### Review against the reference implementation
 
@@ -91,14 +91,44 @@ and per-partition.
 
 ### Not covered here
 
-- `make build-system-test` could not complete on this host. CMake configures,
-  builds, passes both ctests, installs, and satisfies its external consumer;
-  Meson does the same up to its external consumer step, which needs a
-  `pkg-config` binary that is not installed. No build definition changed,
-  because the codec added no source file.
 - `make tsan` and the long reader/writer soak remain native-Linux gates.
 - The decision about whether telezip enables block compression by default is
   deliberately separate and needs the real vehicle traffic, not this corpus.
+
+### Independent merge review (2026-09-09)
+
+The checks were repeated from a clean feature-branch worktree before merging.
+This second series preserves rather than replaces the feature-development
+figures above.
+
+- The implementation and normative grammar were checked against the official
+  LZ4 raw-block specification, including offset bounds, overlapping copies,
+  extended lengths, the final literal-only sequence, the five final literals,
+  and the twelve-byte last-match restriction.
+- A temporary independent harness linked the TFDB codec against the system
+  `liblz4 1.9.4`. It checked 528 structured/random payloads in both directions
+  and 300,000 mutated streams. Every TFDB stream decoded to the original bytes
+  with liblz4; every liblz4 stream decoded to the original bytes with TFDB; and
+  TFDB never accepted a mutation for which liblz4 produced different bytes.
+- `make check` passed 85/85 tests, all 14 crash-matrix groups passed,
+  ASan/UBSan was clean, and `make cxx17-check` reported no unchecked `Status`
+  or warning. A clean coverage rebuild measured `codec.cpp` at 96.6% of lines
+  and 67.1% of branch outcomes, and total production coverage at 92.6% of
+  2,691 executable lines and 52.0% of 3,799 branch outcomes. These slightly
+  lower clean-rerun figures are the conservative coverage evidence for the
+  exact merge candidate; all configured floors still pass.
+- CMake/Ninja and Meson/Ninja both configured, built all targets, passed their
+  tests, installed into isolated prefixes, and built external consumers. The
+  Meson consumer used the isolated `pkg-config 1.8.1` toolchain, closing the
+  environment-only gap from the initial feature run.
+- The Rust suite passed 21/21 tests, the twelve committed images reproduced
+  byte-for-byte, all 20 manifest cases agreed between C++ and Rust, the
+  committed SHA-256 list passed, the 15-page HTML mirror was current, and the
+  integration skill passed its structural validator.
+- A second long fuzz run used
+  `make fuzz FUZZ_ITERATIONS=5000000 FUZZ_JOBS=20 FUZZ_SEED=202609090907`.
+  All 5,000,000 media-plus-codec iterations completed without a crash, hang,
+  sanitizer report, undocumented status, or saved failing image.
 
 ## Post-baseline interoperability evidence (2026-09-06)
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="36f8d6bac464306ae04ae6cf171e8566188af01208306ee016dd558535e3b8cb">
+  <meta name="tfdb-source-sha256" content="45a7a0cc9feb1cc81ab8c689383cc66368a76e9e2589836886de427162172789">
   <title>Reference verification evidence — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -78,9 +78,9 @@ or undocumented status. The harness now derives images from both the
 mutates a valid codec stream, seeded from the encoders themselves, and drives
 every built-in decoder over it.</li>
 <li><code>make check</code>, <code>make crash-matrix</code>, <code>make sanitize</code>, and <code>make cxx17-check</code>
-are clean with zero warnings under the standard warning set. Coverage holds:
-<code>codec.cpp</code> is 97.0% of lines and 68.0% of branch outcomes against 85%/50%
-floors, and the production total is 92.7% of lines.</li>
+are clean with zero warnings under the standard warning set. The feature
+development run recorded <code>codec.cpp</code> at 97.0% of lines and 68.0% of branch
+outcomes against 85%/50% floors, and the production total at 92.7% of lines.</li>
 </ul>
 <h3 id="review-against-the-reference-implementation">Review against the reference implementation</h3>
 <p>The implementation was written rather than vendored (ADR-037), so it was
@@ -146,14 +146,43 @@ compressed records would gain nothing, which is why the codec stays optional
 and per-partition.</p>
 <h3 id="not-covered-here">Not covered here</h3>
 <ul>
-<li><code>make build-system-test</code> could not complete on this host. CMake configures,
-builds, passes both ctests, installs, and satisfies its external consumer;
-Meson does the same up to its external consumer step, which needs a
-<code>pkg-config</code> binary that is not installed. No build definition changed,
-because the codec added no source file.</li>
 <li><code>make tsan</code> and the long reader/writer soak remain native-Linux gates.</li>
 <li>The decision about whether telezip enables block compression by default is
 deliberately separate and needs the real vehicle traffic, not this corpus.</li>
+</ul>
+<h3 id="independent-merge-review-2026-09-09">Independent merge review (2026-09-09)</h3>
+<p>The checks were repeated from a clean feature-branch worktree before merging.
+This second series preserves rather than replaces the feature-development
+figures above.</p>
+<ul>
+<li>The implementation and normative grammar were checked against the official
+LZ4 raw-block specification, including offset bounds, overlapping copies,
+extended lengths, the final literal-only sequence, the five final literals,
+and the twelve-byte last-match restriction.</li>
+<li>A temporary independent harness linked the TFDB codec against the system
+<code>liblz4 1.9.4</code>. It checked 528 structured/random payloads in both directions
+and 300,000 mutated streams. Every TFDB stream decoded to the original bytes
+with liblz4; every liblz4 stream decoded to the original bytes with TFDB; and
+TFDB never accepted a mutation for which liblz4 produced different bytes.</li>
+<li><code>make check</code> passed 85/85 tests, all 14 crash-matrix groups passed,
+ASan/UBSan was clean, and <code>make cxx17-check</code> reported no unchecked <code>Status</code>
+or warning. A clean coverage rebuild measured <code>codec.cpp</code> at 96.6% of lines
+and 67.1% of branch outcomes, and total production coverage at 92.6% of
+2,691 executable lines and 52.0% of 3,799 branch outcomes. These slightly
+lower clean-rerun figures are the conservative coverage evidence for the
+exact merge candidate; all configured floors still pass.</li>
+<li>CMake/Ninja and Meson/Ninja both configured, built all targets, passed their
+tests, installed into isolated prefixes, and built external consumers. The
+Meson consumer used the isolated <code>pkg-config 1.8.1</code> toolchain, closing the
+environment-only gap from the initial feature run.</li>
+<li>The Rust suite passed 21/21 tests, the twelve committed images reproduced
+byte-for-byte, all 20 manifest cases agreed between C++ and Rust, the
+committed SHA-256 list passed, the 15-page HTML mirror was current, and the
+integration skill passed its structural validator.</li>
+<li>A second long fuzz run used
+<code>make fuzz FUZZ_ITERATIONS=5000000 FUZZ_JOBS=20 FUZZ_SEED=202609090907</code>.
+All 5,000,000 media-plus-codec iterations completed without a crash, hang,
+sanitizer report, undocumented status, or saved failing image.</li>
 </ul>
 <h2 id="post-baseline-interoperability-evidence-2026-09-06">Post-baseline interoperability evidence (2026-09-06)</h2>
 <p>The following worktree checks ran on the same WSL2 kernel family with g++
@@ -550,7 +579,7 @@ before freezing format v1.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">36f8d6bac464306ae04ae6cf171e8566188af01208306ee016dd558535e3b8cb</span></p>
+        <p>Source SHA-256: <span class="source-hash">45a7a0cc9feb1cc81ab8c689383cc66368a76e9e2589836886de427162172789</span></p>
       </footer>
     </main>
   </div>

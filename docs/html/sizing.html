@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="440250f277ae7b8b0a3799e2456ede18891d9ee110a1cd8c30a7f81a5b4b2c85">
+  <meta name="tfdb-source-sha256" content="dc2b4411f17bb7d367fe5a82c70efb7a9ad0e17d0eb1a63e31d8320f7fb69c56">
   <title>Sizing, loss bound, RAM, and eight-year endurance — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -248,9 +248,10 @@ async addition &lt;= configured queue byte capacity
                 + one oldest-undurable timestamp
 </code></pre>
 <p>For TFDB PackBits the candidate bound is <code>B + ceil(B/128)</code>, and for TFDB LZ4
-block it is <code>B + floor(B/255) + 16</code>; the LZ4 encoder additionally holds a fixed
-32 KiB match table for the duration of one <code>compress()</code> call. The <code>none</code> codec
-skips that candidate copy. Multiple readers
+block it is <code>B + floor(B/255) + 16</code>; the LZ4 encoder additionally holds a
+4096-entry <code>size_t</code> match table for the duration of one <code>compress()</code> call
+(32 KiB on a 64-bit target, 16 KiB on a 32-bit target). The <code>none</code> codec skips
+that candidate copy. Multiple readers
 multiply reader memory; they do not pin media. Measure RSS with the final
 allocator and concurrency because vector capacity and thread stacks are not in
 the formulas.</p>
@@ -280,7 +281,7 @@ amplification and endurance margin.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">440250f277ae7b8b0a3799e2456ede18891d9ee110a1cd8c30a7f81a5b4b2c85</span></p>
+        <p>Source SHA-256: <span class="source-hash">dc2b4411f17bb7d367fe5a82c70efb7a9ad0e17d0eb1a63e31d8320f7fb69c56</span></p>
       </footer>
     </main>
   </div>

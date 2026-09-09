@@ -214,9 +214,10 @@ async addition <= configured queue byte capacity
 ```
 
 For TFDB PackBits the candidate bound is `B + ceil(B/128)`, and for TFDB LZ4
-block it is `B + floor(B/255) + 16`; the LZ4 encoder additionally holds a fixed
-32 KiB match table for the duration of one `compress()` call. The `none` codec
-skips that candidate copy. Multiple readers
+block it is `B + floor(B/255) + 16`; the LZ4 encoder additionally holds a
+4096-entry `size_t` match table for the duration of one `compress()` call
+(32 KiB on a 64-bit target, 16 KiB on a 32-bit target). The `none` codec skips
+that candidate copy. Multiple readers
 multiply reader memory; they do not pin media. Measure RSS with the final
 allocator and concurrency because vector capacity and thread stacks are not in
 the formulas.

@@ -31,6 +31,21 @@ grep -q 'selector=0' "$work_dir/dump.out"
 "$tool_dir/tfdb_dump" "$loaded_store" --raw-blocks >"$work_dir/raw.bin"
 test -s "$work_dir/raw.bin"
 
+# Keep the CLI wiring for the optional LZ4 block codec covered as well as the
+# codec implementation itself. Verify both the persisted partition setting
+# and the ability of the normal reader path to decode the resulting blocks.
+lz4_store="$work_dir/lz4.tfdb"
+"$tool_dir/tfdb_loadgen" "$lz4_store" --size "$size" --records 50 \
+  --profile compressible --compression lz4 --partition 65536 --index 4096 \
+  --block 256 --quantum 4096 --checkpoint-records 10 \
+  >"$work_dir/lz4-load.out"
+grep -q 'records=50' "$work_dir/lz4-load.out"
+grep -q 'durable_records=50' "$work_dir/lz4-load.out"
+"$tool_dir/tfdb_inspect" "$lz4_store" >"$work_dir/lz4-inspect.out"
+grep -q ' compression=2 ' "$work_dir/lz4-inspect.out"
+"$tool_dir/tfdb_verify" "$lz4_store" >"$work_dir/lz4-verify.out"
+grep -q 'gaps=0' "$work_dir/lz4-verify.out"
+
 # Exercise the load tool's independent persisted-write retention oracle across
 # repeated slot replacement, not only on a volume that still retains ordinal 0.
 rotating_store="$work_dir/rotating.tfdb"

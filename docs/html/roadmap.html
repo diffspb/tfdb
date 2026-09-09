@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="e497b6365e35f0672d34a46a2055cdd254b3ffab99684f0f9ca0fec455913b17">
+  <meta name="tfdb-source-sha256" content="9780e45c364aad6622dc45626193615f22bc7f4d9fa2d3f7b9fd1f814f4caa74">
   <title>Post-1.0 roadmap and project handoff — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -51,8 +51,8 @@ runtime dependencies: none beyond Linux/POSIX and the C++ standard library
 </code></pre>
 <p>The baseline contains the synchronous ring store, bounded asynchronous
 wrapper, regular-file/block-device backend, deterministic memory/fault model,
-FramedRecordV1, raw, PackBits and LZ4 blocks, time indexing, query/gap handling,
-five diagnostic/load tools, examples, and Markdown/HTML documentation.</p>
+FramedRecordV1, raw and PackBits blocks, time indexing, query/gap handling, five
+diagnostic/load tools, examples, and Markdown/HTML documentation.</p>
 <p>Reference software evidence is reproducible and recorded in
 <a href="evidence.html"><code>evidence.md</code></a>. It includes 76 library/recovery/integration tests,
 14 focused crash-matrix groups, ASan/UBSan, line/branch coverage gates, public-
@@ -64,7 +64,9 @@ files, and delivers the independent standard-library-only Rust reader and
 three read-only tools. <code>testdata/format-v1/valid-mixed.tfdb</code> is regenerated
 byte-for-byte by the C++ public API; the cross-language test compares both
 implementations over its valid and derived corruption/recovery cases. See
-<a href="rust-reader.html"><code>rust-reader.md</code></a> and <a href="evidence.html"><code>evidence.md</code></a>.</p>
+<a href="rust-reader.html"><code>rust-reader.md</code></a> and <a href="evidence.html"><code>evidence.md</code></a>.
+The current post-baseline tree also assigns the previously reserved compression
+ID 2 to the dependency-free <code>lz4_block:1</code> implementation described by ADR-036.</p>
 <p>The current post-baseline development version is 1.1.0 and is distributed
 under the BSD-2-Clause license. This does not move or rewrite the immutable
 <code>v1.0.0</code> tag, declare a 1.1.0 release, or freeze the persistent format.</p>
@@ -139,7 +141,7 @@ every invalid vector is rejected in the documented class; live C++-generated
 volumes can be inspected and dumped independently.</p>
 <p>Current state: the independent reader implements the listed decoding,
 recovery, scan/query, profile, and tool behavior. The deterministic mixed
-volume plus 17 additional cases have matching C++/Rust outcomes. Ten complete
+volume plus 19 additional cases have matching C++/Rust outcomes. Twelve complete
 images are committed with SHA-256 digests; the others are deterministic small
 mutations. Feature-directory semantics, checked-arithmetic boundaries, a
 writer-chain stale suffix, and three live-rotation snapshots are now shared
@@ -327,7 +329,7 @@ both readers, and evidence together before declaring format freeze.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">e497b6365e35f0672d34a46a2055cdd254b3ffab99684f0f9ca0fec455913b17</span></p>
+        <p>Source SHA-256: <span class="source-hash">9780e45c364aad6622dc45626193615f22bc7f4d9fa2d3f7b9fd1f814f4caa74</span></p>
       </footer>
     </main>
   </div>
