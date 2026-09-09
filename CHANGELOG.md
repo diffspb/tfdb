@@ -35,6 +35,9 @@ separate: format v1 remains a candidate until the qualification gates in
 
 ### Fixed
 
+- made the multi-reader hot-rotation regression deterministic by holding all
+  four readers across actual slot reuse, removing scheduler-dependent empty
+  runs under CPU saturation;
 - converted exceptions escaping the asynchronous writer thread into a stored
   background failure instead of terminating the process;
 - aligned Rust feature-region validation and damaged-header recovery with the

@@ -130,6 +130,27 @@ figures above.
   All 5,000,000 media-plus-codec iterations completed without a crash, hang,
   sanitizer report, undocumented status, or saved failing image.
 
+### Deterministic hot-rotation regression (2026-09-09)
+
+The original `multiple_readers_remain_safe_during_hot_rotation` scenario
+started four reader threads and immediately ran the in-memory writer. It did
+not prove that a reader had entered `scan_blocks()` before the writer set its
+stop flag. With 20 CPU workers saturating this WSL2 host, that test failed at
+the no-data-event assertion in 191/200 runs at `9bcc256` and 91/100 runs at the
+pre-LZ4 `201f06b` baseline. No corruption or reader-status assertion fired.
+
+The replacement uses the deterministic `MemoryStorage` hook: all four readers
+must capture a catalog snapshot and stall immediately before their first
+partition-header read. The writer then checkpoints 100 records and reuses both
+partition slots before releasing them. Each reader must report exactly one
+overwrite gap from its stale scan, then complete a second stable scan with
+intact 800-byte single-value payloads. The revised test passed 200/200 runs
+under the same 20-worker saturation, as well as `make check`, `make sanitize`,
+`make cxx17-check`, and all `make coverage` floors. That coverage run measured
+92.4% of 2,691 production lines and 51.7% of 3,799 branch outcomes. This is a
+deterministic software regression oracle; it does not replace the native-Linux
+ThreadSanitizer and long-soak gates.
+
 ## Post-baseline interoperability evidence (2026-09-06)
 
 The following worktree checks ran on the same WSL2 kernel family with g++

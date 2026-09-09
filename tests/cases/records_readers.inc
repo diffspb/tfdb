@@ -248,16 +248,41 @@ TEST(multiple_readers_remain_safe_during_hot_rotation) {
   REQUIRE_OK(fixture.store->append(tfdb::ByteView(initial), 0));
   REQUIRE_OK(fixture.store->checkpoint());
 
-  std::atomic<bool> stop(false), failed(false);
+  const unsigned reader_count = 4;
+  std::atomic<bool> failed(false);
   std::atomic<std::uint64_t> data_events(0), gap_events(0);
   std::atomic<std::uint64_t> unexpected_gap_events(0), status_errors(0);
   std::atomic<std::uint64_t> bad_sizes(0), mixed_payloads(0);
   std::mutex failure_detail_mutex;
   std::string first_failure_detail;
+
+  // Stall every reader immediately after it has captured the RingStore
+  // catalog but before its first partition-header read. This makes the
+  // overlap with rotation deterministic instead of assuming that newly
+  // created threads will be scheduled before the fast in-memory writer exits.
+  std::mutex gate_mutex;
+  std::condition_variable gate_condition;
+  unsigned blocked_readers = 0;
+  bool release_readers = false;
+  fixture.storage->set_hook([&](tfdb::StorageOperation operation,
+                                tfdb::HookPoint point, std::uint64_t,
+                                std::uint64_t, std::size_t) {
+    if (operation != tfdb::StorageOperation::read ||
+        point != tfdb::HookPoint::before)
+      return;
+    std::unique_lock<std::mutex> lock(gate_mutex);
+    ++blocked_readers;
+    gate_condition.notify_all();
+    gate_condition.wait(lock, [&] { return release_readers; });
+  });
+
   std::vector<std::thread> readers;
-  for (unsigned reader = 0; reader != 4; ++reader) {
+  for (unsigned reader = 0; reader != reader_count; ++reader) {
     readers.emplace_back([&] {
-      while (!stop.load()) {
+      // The first scan is deliberately stalled across rotation and must report
+      // an overwrite gap. The second runs against the settled image and must
+      // still return intact data.
+      for (unsigned scan = 0; scan != 2; ++scan) {
         const tfdb::Status status = fixture.store->scan_blocks(
             tfdb::QueryOptions(), [&](const tfdb::BlockEvent& event) {
               if (event.kind == tfdb::BlockEventKind::data) {
@@ -300,17 +325,35 @@ TEST(multiple_readers_remain_safe_during_hot_rotation) {
       }
     });
   }
-  for (std::uint16_t ordinal = 1; ordinal <= 100; ++ordinal) {
-    std::vector<std::uint8_t> payload(800,
-        static_cast<std::uint8_t>(ordinal));
-    if (!fixture.store->append(tfdb::ByteView(payload), ordinal).ok() ||
-        !fixture.store->checkpoint().ok()) {
-      failed.store(true);
-      break;
+
+  bool all_readers_blocked = false;
+  {
+    std::unique_lock<std::mutex> lock(gate_mutex);
+    all_readers_blocked = gate_condition.wait_for(
+        lock, std::chrono::seconds(5),
+        [&] { return blocked_readers == reader_count; });
+  }
+  if (all_readers_blocked) {
+    for (std::uint16_t ordinal = 1; ordinal <= 100; ++ordinal) {
+      std::vector<std::uint8_t> payload(800,
+          static_cast<std::uint8_t>(ordinal));
+      if (!fixture.store->append(tfdb::ByteView(payload), ordinal).ok() ||
+          !fixture.store->checkpoint().ok()) {
+        failed.store(true);
+        break;
+      }
     }
   }
-  stop.store(true);
+
+  fixture.storage->set_hook(tfdb::StorageHook());
+  {
+    std::lock_guard<std::mutex> lock(gate_mutex);
+    release_readers = true;
+  }
+  gate_condition.notify_all();
   for (std::thread& reader : readers) reader.join();
+
+  REQUIRE(all_readers_blocked);
   if (unexpected_gap_events.load() != 0 || status_errors.load() != 0)
     throw Failure{first_failure_detail};
   REQUIRE_EQ(status_errors.load(), 0u);
@@ -318,5 +361,5 @@ TEST(multiple_readers_remain_safe_during_hot_rotation) {
   REQUIRE_EQ(mixed_payloads.load(), 0u);
   REQUIRE(!failed.load());
   REQUIRE(data_events.load() != 0);
-  REQUIRE(gap_events.load() <= data_events.load() + 400u);
+  REQUIRE_EQ(gap_events.load(), static_cast<std::uint64_t>(reader_count));
 }

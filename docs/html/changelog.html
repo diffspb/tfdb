@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="36a7766aa0ed93910992de1f841ea88de8d39a1f9b32dbe68623952bd1b1d456">
+  <meta name="tfdb-source-sha256" content="7b529f3736c427d68354ee5254fc178b5edfac8c1d909dd9dd4274265673a245">
   <title>Changelog — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -70,6 +70,9 @@ durability contracts;</li>
 </ul>
 <h3 id="fixed">Fixed</h3>
 <ul>
+<li>made the multi-reader hot-rotation regression deterministic by holding all
+four readers across actual slot reuse, removing scheduler-dependent empty
+runs under CPU saturation;</li>
 <li>converted exceptions escaping the asynchronous writer thread into a stored
 background failure instead of terminating the process;</li>
 <li>aligned Rust feature-region validation and damaged-header recovery with the
@@ -85,7 +88,7 @@ blocks, time index, recovery/gap handling, tools, tests, and documentation.</p>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">36a7766aa0ed93910992de1f841ea88de8d39a1f9b32dbe68623952bd1b1d456</span></p>
+        <p>Source SHA-256: <span class="source-hash">7b529f3736c427d68354ee5254fc178b5edfac8c1d909dd9dd4274265673a245</span></p>
       </footer>
     </main>
   </div>

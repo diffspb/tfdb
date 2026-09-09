@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="tfdb-source-sha256" content="45a7a0cc9feb1cc81ab8c689383cc66368a76e9e2589836886de427162172789">
+  <meta name="tfdb-source-sha256" content="121c9d185a7a2277d842c2c087b0a2883f15dfc3aee741853cf41b6ce34a7609">
   <title>Reference verification evidence — TFDB</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -184,6 +184,24 @@ integration skill passed its structural validator.</li>
 All 5,000,000 media-plus-codec iterations completed without a crash, hang,
 sanitizer report, undocumented status, or saved failing image.</li>
 </ul>
+<h3 id="deterministic-hot-rotation-regression-2026-09-09">Deterministic hot-rotation regression (2026-09-09)</h3>
+<p>The original <code>multiple_readers_remain_safe_during_hot_rotation</code> scenario
+started four reader threads and immediately ran the in-memory writer. It did
+not prove that a reader had entered <code>scan_blocks()</code> before the writer set its
+stop flag. With 20 CPU workers saturating this WSL2 host, that test failed at
+the no-data-event assertion in 191/200 runs at <code>9bcc256</code> and 91/100 runs at the
+pre-LZ4 <code>201f06b</code> baseline. No corruption or reader-status assertion fired.</p>
+<p>The replacement uses the deterministic <code>MemoryStorage</code> hook: all four readers
+must capture a catalog snapshot and stall immediately before their first
+partition-header read. The writer then checkpoints 100 records and reuses both
+partition slots before releasing them. Each reader must report exactly one
+overwrite gap from its stale scan, then complete a second stable scan with
+intact 800-byte single-value payloads. The revised test passed 200/200 runs
+under the same 20-worker saturation, as well as <code>make check</code>, <code>make sanitize</code>,
+<code>make cxx17-check</code>, and all <code>make coverage</code> floors. That coverage run measured
+92.4% of 2,691 production lines and 51.7% of 3,799 branch outcomes. This is a
+deterministic software regression oracle; it does not replace the native-Linux
+ThreadSanitizer and long-soak gates.</p>
 <h2 id="post-baseline-interoperability-evidence-2026-09-06">Post-baseline interoperability evidence (2026-09-06)</h2>
 <p>The following worktree checks ran on the same WSL2 kernel family with g++
 13.3.0, CMake 3.28.3, Meson 1.3.2, Ninja 1.11.1, and rustc/cargo 1.75.0. These
@@ -579,7 +597,7 @@ before freezing format v1.</li>
 
       <footer class="page-footer">
         <p>Generated deterministically by <code>python3 docs/build_html.py</code>.</p>
-        <p>Source SHA-256: <span class="source-hash">45a7a0cc9feb1cc81ab8c689383cc66368a76e9e2589836886de427162172789</span></p>
+        <p>Source SHA-256: <span class="source-hash">121c9d185a7a2277d842c2c087b0a2883f15dfc3aee741853cf41b6ce34a7609</span></p>
       </footer>
     </main>
   </div>
